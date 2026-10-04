@@ -499,23 +499,25 @@ const SPIKE = { // spike root and tip colours per colour morph
   chocolate: { base: '#5a3720', tip: '#ecd6b7', face: '#f4e0c7', ear: '#eea39c' },
   albino:    { base: '#eadbcd', tip: '#ffffff', face: '#fdf3ea', ear: '#f7bdb6' },
 };
+// Real quills are banded: a pale root, a brown band through the middle and a pale tip.
 function spikeGeometry(base, tip) {
-  const g = new THREE.ConeGeometry(1, 1, 9, 5);
+  const g = new THREE.ConeGeometry(1, 1, 7, 8);
   const pos = g.attributes.position, cols = [];
   const b = col(base), t = col(tip);
   for (let i = 0; i < pos.count; i++) {
-    const k = Math.pow(pos.getY(i) + .5, 3.2); // 0 at the root, 1 at the tip: mostly brown, pale tip
-    const c = b.clone().lerp(t, k); cols.push(c.r, c.g, c.b);
+    const y = pos.getY(i) + .5; // 0 at the root, 1 at the tip
+    const k = y < .18 ? .55 - y * 3 : y < .72 ? 0 : Math.pow((y - .72) / .28, 1.4);
+    const c = b.clone().lerp(t, clamp(k, 0, 1)); cols.push(c.r, c.g, c.b);
   }
   g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
   return g;
 }
 // Chunky cones with a rounded cap on the end, leaning slightly back like a coat of spines.
-function spikeField(pts, P, mode, rnd) {
+function spikeField(pts, P, mode, rnd, noCaps) {
   const geo = spikeGeometry(P.base, P.tip);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .55 });
   const cones = new THREE.InstancedMesh(geo, mat, pts.length);
-  const caps = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 8), std('#' + col(P.base).convertLinearToSRGB().lerp(col(P.tip).convertLinearToSRGB(), .75).getHexString(), { roughness: .5 }), pts.length);
+  const caps = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 6, 4), std('#' + col(P.base).convertLinearToSRGB().lerp(col(P.tip).convertLinearToSRGB(), .75).getHexString(), { roughness: .5 }), pts.length);
   const up = V3(0, 1, 0), back = V3(-1, .2, 0), q = new THREE.Quaternion(), M = new THREE.Matrix4(), pos = V3();
   pts.forEach((p, i) => {
     const d = (mode === 'raised' || mode === 'radial')
@@ -526,7 +528,7 @@ function spikeField(pts, P, mode, rnd) {
     pos.copy(p.p).addScaledVector(p.n, -.03).addScaledVector(d, len / 2);
     M.compose(pos, q, V3(rad, len, rad)); cones.setMatrixAt(i, M);
     pos.copy(p.p).addScaledVector(p.n, -.03).addScaledVector(d, len * .9);
-    M.compose(pos, q, V3(rad * .17, rad * .17, rad * .17)); caps.setMatrixAt(i, M);
+    M.compose(pos, q, noCaps ? V3(0, 0, 0) : V3(rad * .2, rad * .2, rad * .2)); caps.setMatrixAt(i, M);
   });
   cones.castShadow = true; caps.castShadow = false;
   const g = new THREE.Group(); g.add(cones, caps);
@@ -570,18 +572,26 @@ function buildHog(coatKey, stage = STAGE_MAX) {
   body.add(mesh(bodyGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .7 }), { p: c, s: r }));
 
   // spikes cover the top, back and sides; the face and belly stay smooth
-  const N = Math.round(110 + 170 * k), len = .17 + .15 * k, rad = .1 + .04 * k;
-  const pts = [];
-  const M = Math.round(N / .56), GA = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < M; i++) { // golden-angle spiral gives an even, tidy coat
-    const y = 1 - 2 * (i + .5) / M, rr = Math.sqrt(1 - y * y), th = i * GA;
-    const v = V3(Math.cos(th) * rr, y, Math.sin(th) * rr).add(V3((rnd() - .5) * .04, (rnd() - .5) * .04, (rnd() - .5) * .04)).normalize();
-    if (v.y < -.42) continue;
-    if (v.x > edgeAt(v.y) - .02) continue;
-    const p = V3(c.x + v.x * r.x, c.y + v.y * r.y, c.z + v.z * r.z);
-    const n = V3(v.x / r.x, v.y / r.y, v.z / r.z).normalize();
-    pts.push({ p, n, len: len * (.85 + rnd() * .3) * (v.y < -.15 ? .75 : 1), rad: rad * (.9 + rnd() * .2) });
-  }
+  // a dense coat: a long top layer over a short, darker under-layer so no bare skin shows between spikes
+  const N = Math.round(380 + 420 * k), len = .16 + .15 * k, rad = .048 + .016 * k;
+  const GA = Math.PI * (3 - Math.sqrt(5));
+  const coat = (count, phase, lenK, radK) => {
+    const out = [], M = Math.round(count / .56);
+    for (let i = 0; i < M; i++) { // golden-angle spiral gives an even coat
+      const y = 1 - 2 * (i + .5) / M, rr = Math.sqrt(1 - y * y), th = i * GA + phase;
+      const v = V3(Math.cos(th) * rr, y, Math.sin(th) * rr).add(V3((rnd() - .5) * .05, (rnd() - .5) * .05, (rnd() - .5) * .05)).normalize();
+      if (v.y < -.42) continue;
+      if (v.x > edgeAt(v.y) - .02) continue;
+      const p = V3(c.x + v.x * r.x, c.y + v.y * r.y, c.z + v.z * r.z);
+      const n = V3(v.x / r.x, v.y / r.y, v.z / r.z).normalize();
+      out.push({ p, n, len: len * lenK * (.8 + rnd() * .4) * (v.y < -.15 ? .75 : 1) * (v.x > edgeAt(v.y) - .15 ? .8 : 1), rad: rad * radK * (.85 + rnd() * .3) });
+    }
+    return out;
+  };
+  const pts = coat(N, 0, 1, 1);
+  const under = coat(Math.round(N * 1.2), 1.3, .55, 1.25);
+  const PU = { base: '#' + col(PP.base).convertLinearToSRGB().multiplyScalar(.82).getHexString(), tip: PP.base };
+  body.add(spikeField(under, PU, 'lying', rnd, true));
   let guard = 0;
   const lying = spikeField(pts, PP, 'lying', rnd), raised = spikeField(pts, PP, 'raised', rnd);
   raised.visible = false;
@@ -631,15 +641,15 @@ function buildHog(coatKey, stage = STAGE_MAX) {
   // rolled into a ball: spikes all round, the face tucked in with closed eyes
   const bc = V3(0, .4, 0), br = V3(.4, .38, .4);
   ball.add(mesh(new THREE.SphereGeometry(1, 36, 28), std(PP.base, { roughness: .9 }), { p: bc, s: br }));
-  const bpts = [];
-  guard = 0;
-  while (bpts.length < N + 30 && guard++ < 20000) {
-    const v = V3(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1);
-    const l = v.length(); if (l > 1 || l < .1) continue;
-    v.divideScalar(l);
+  const bpts = [], bunder = [], BM = Math.round(N * 1.5);
+  for (let i = 0; i < BM; i++) {
+    const y = 1 - 2 * (i + .5) / BM, rr = Math.sqrt(1 - y * y), th = i * GA;
+    const v = V3(Math.cos(th) * rr, y, Math.sin(th) * rr).add(V3((rnd() - .5) * .05, (rnd() - .5) * .05, (rnd() - .5) * .05)).normalize();
     if (v.y < -.75 || (v.x > .55 && v.y < .1 && v.y > -.7 && Math.abs(v.z) < .45)) continue;
-    bpts.push({ p: V3(bc.x + v.x * br.x, bc.y + v.y * br.y, bc.z + v.z * br.z), n: v.clone(), len: len * .7 * (.85 + rnd() * .3), rad: rad * .85 });
+    const pt = { p: V3(bc.x + v.x * br.x, bc.y + v.y * br.y, bc.z + v.z * br.z), n: v.clone(), len: len * .7 * (.8 + rnd() * .4), rad: rad * .9 * (.85 + rnd() * .3) };
+    (i % 2 ? bunder : bpts).push(i % 2 ? Object.assign(pt, { len: pt.len * .55, rad: pt.rad * 1.2 }) : pt);
   }
+  ball.add(spikeField(bunder, PU, 'radial', rnd, true));
   ball.add(spikeField(bpts, PP, 'radial', rnd));
   const peek = onSurface(ball, bc, br, V3(.85, -.32, 0), -.01);
   peek.add(mesh(new THREE.SphereGeometry(.17, 20, 14), cream, { s: V3(1.1, .85, .45) }));
