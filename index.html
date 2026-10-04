@@ -483,139 +483,167 @@ function rod(a, b, r, mat) {
 }
 
 /* ---------- hedgehog model ---------- */
-function quillGeometry(c) {
-  const g = new THREE.CylinderGeometry(.0035, .017, 1, 5, 6);
+// A soft, rounded 3D hedgehog in ten growth stages: a round cream face and belly, big glossy eyes,
+// pink cheeks and ears, a little snout with a black nose, and chunky rounded spikes over the back.
+// Stages 1-2 are sleepy babies with closed eyes and short pale spikes; each stage grows longer,
+// with more, longer and darker spikes.
+const STAGE_MAX = 10;
+const stageOf = (s, t = Date.now()) => clamp(1 + Math.floor((ageWeeks(s, t) - 8) / 2), 1, STAGE_MAX);
+const SPIKE = { // spike root and tip colours per colour morph
+  sp:        { base: '#8f5428', tip: '#f6e1c3', face: '#f8e2c8', ear: '#f5a9a2' },
+  cinnamon:  { base: '#b8733c', tip: '#fbe7cb', face: '#fbe9d3', ear: '#f6ad9f' },
+  chocolate: { base: '#5a3720', tip: '#ecd6b7', face: '#f4e0c7', ear: '#eea39c' },
+  albino:    { base: '#eadbcd', tip: '#ffffff', face: '#fdf3ea', ear: '#f7bdb6' },
+};
+function spikeGeometry(base, tip) {
+  const g = new THREE.ConeGeometry(1, 1, 9, 5);
   const pos = g.attributes.position, cols = [];
-  const base = col(c.tip).lerp(col(c.mid), .55), band = col(c.band), mid = col(c.mid), tip = col(c.tip);
+  const b = col(base), t = col(tip);
   for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i) + .5; // 0 at the root, 1 at the tip
-    const k = y < .32 ? base : y < .66 ? band : y < .82 ? mid : tip;
-    cols.push(k.r, k.g, k.b);
+    const k = Math.pow(pos.getY(i) + .5, 3.2); // 0 at the root, 1 at the tip: mostly brown, pale tip
+    const c = b.clone().lerp(t, k); cols.push(c.r, c.g, c.b);
   }
   g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
   return g;
 }
-// Quills: lying flat toward the tail when calm, standing out along the skin normal when raised.
-function quillField(geo, mat, pts, mode, rnd) {
-  const m = new THREE.InstancedMesh(geo, mat, pts.length);
-  const up = V3(0, 1, 0), back = V3(-1, .1, 0), q = new THREE.Quaternion(), M = new THREE.Matrix4(), pos = V3(), sc = V3();
+// Chunky cones with a rounded cap on the end, leaning slightly back like a coat of spines.
+function spikeField(pts, P, mode, rnd) {
+  const geo = spikeGeometry(P.base, P.tip);
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .55 });
+  const cones = new THREE.InstancedMesh(geo, mat, pts.length);
+  const caps = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 8), std('#' + col(P.base).convertLinearToSRGB().lerp(col(P.tip).convertLinearToSRGB(), .75).getHexString(), { roughness: .5 }), pts.length);
+  const up = V3(0, 1, 0), back = V3(-1, .2, 0), q = new THREE.Quaternion(), M = new THREE.Matrix4(), pos = V3();
   pts.forEach((p, i) => {
-    let d;
-    if (mode === 'radial') d = p.n.clone().add(V3((rnd() - .5) * .3, (rnd() - .5) * .3, (rnd() - .5) * .3)).normalize();
-    else if (mode === 'raised') d = p.n.clone().addScaledVector(back, .35).add(V3(0, 0, (rnd() - .5) * .2)).normalize();
-    else {
-      const t = back.clone().addScaledVector(p.n, -back.dot(p.n)).normalize();
-      d = t.multiplyScalar(.86).addScaledVector(p.n, .4 + rnd() * .12).add(V3(0, 0, (rnd() - .5) * .18)).normalize();
-    }
+    const d = (mode === 'raised' || mode === 'radial')
+      ? p.n.clone().add(V3((rnd() - .5) * .15, (rnd() - .5) * .15, (rnd() - .5) * .15)).normalize()
+      : p.n.clone().addScaledVector(back, .38).add(V3(0, 0, (rnd() - .5) * .1)).normalize();
+    const len = p.len * (mode === 'raised' ? 1.12 : 1), rad = p.rad;
     q.setFromUnitVectors(up, d);
-    const len = p.len * (mode === 'lying' ? 1 : 1.06);
-    pos.copy(p.p).addScaledVector(p.n, -.025).addScaledVector(d, len / 2);
-    sc.set(1, len, 1);
-    M.compose(pos, q, sc);
-    m.setMatrixAt(i, M);
-    const b = .8 + rnd() * .35;
-    m.setColorAt(i, new THREE.Color(b, b, b));
+    pos.copy(p.p).addScaledVector(p.n, -.03).addScaledVector(d, len / 2);
+    M.compose(pos, q, V3(rad, len, rad)); cones.setMatrixAt(i, M);
+    pos.copy(p.p).addScaledVector(p.n, -.03).addScaledVector(d, len * .9);
+    M.compose(pos, q, V3(rad * .17, rad * .17, rad * .17)); caps.setMatrixAt(i, M);
   });
-  m.castShadow = true;
-  return m;
+  cones.castShadow = true; caps.castShadow = false;
+  const g = new THREE.Group(); g.add(cones, caps);
+  return g;
+}
+// Puts a feature on the body surface facing outwards; build it in local coordinates where +z points out.
+function onSurface(parent, c, r, dir, lift = 0) {
+  const v = dir.clone().normalize();
+  const p = V3(c.x + v.x * r.x, c.y + v.y * r.y, c.z + v.z * r.z);
+  const n = V3(v.x / r.x, v.y / r.y, v.z / r.z).normalize();
+  const g = new THREE.Group(); g.position.copy(p).addScaledVector(n, lift);
+  parent.add(g); g.lookAt(g.getWorldPosition(V3()).add(n));
+  return g;
 }
 
-function buildHog(coatKey) {
-  const c = COATS[coatKey] || COATS.sp;
-  const rnd = seeded(21);
+function buildHog(coatKey, stage = STAGE_MAX) {
+  const P = SPIKE[coatKey] || SPIKE.sp, c0 = COATS[coatKey] || COATS.sp;
+  const k = (stage - 1) / (STAGE_MAX - 1);
+  const rnd = seeded(40 + stage);
+  // babies have paler spikes that darken as they grow
+  const PP = { base: '#' + col(P.base).convertLinearToSRGB().lerp(col(P.tip).convertLinearToSRGB(), (1 - k) * .3).getHexString(), tip: P.tip };
   const root = new THREE.Group(), stand = new THREE.Group(), ball = new THREE.Group();
   root.add(stand, ball);
-  const fur = (hex, seed) => canvasTex(256, 256, (g, w, h) => {
-    g.fillStyle = hex; g.fillRect(0, 0, w, h); const rr = seeded(seed);
-    for (let i = 0; i < 3200; i++) { const x = rr() * w, y = rr() * h, l = 2 + rr() * 5, a = rr() * .7 - .35; g.strokeStyle = rr() < .55 ? 'rgba(255,255,255,.16)' : 'rgba(70,45,30,.11)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
-  });
-  const skin = std(c.skin, { roughness: .7 }), pink = std('#e9a9a0', { roughness: .6 });
-  const face = new THREE.MeshStandardMaterial({ map: fur(c.face, 31), roughness: 1 });
-  const muzzle = new THREE.MeshStandardMaterial({ map: fur('#' + col(c.face).convertLinearToSRGB().lerp(new THREE.Color(1, 1, 1), .35).getHexString(), 32), roughness: 1 });
-  const belly = new THREE.MeshStandardMaterial({ map: fur(c.belly, 33), roughness: 1 });
-  const glossy = (hex) => std(hex, { roughness: .12, metalness: .1 });
-  const qMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .55, metalness: .02 });
-  const qGeo = quillGeometry(c);
+  const body = new THREE.Group(); stand.add(body); // tilts as a whole for eating and looking around
+  const cream = std(P.face, { roughness: .7 }), light = std('#fff6ec', { roughness: .65 });
+  const pink = std(P.ear, { roughness: .6 }), cheek = std('#f59a9a', { roughness: .8, transparent: true, opacity: .7 });
+  const glossy = (hex) => std(hex, { roughness: .06, metalness: .15 });
+  const dark = std('#2b1d17', { roughness: .5 });
 
-  // body: an ellipsoid of dark under-coat covered with quills, belly fur below
-  const BC = V3(0, .52, 0), BR = V3(.9, .52, .62);
-  stand.add(mesh(new THREE.SphereGeometry(1, 40, 28), std(c.dark, { roughness: 1 }), { p: BC, s: BR }));
-  stand.add(mesh(new THREE.SphereGeometry(1, 32, 20), belly, { p: V3(.02, .4, 0), s: V3(.86, .4, .635) }));
+  const r = V3(.62 * (.96 + .16 * k), .62 * (.95 - .05 * k), .62 * .9);
+  const c = V3(0, r.y + .07, 0);
+  const edgeAt = (y) => .32 + (y > .45 ? .22 * Math.min(1, (y - .45) / .2) : 0);
+  const bodyGeo = new THREE.SphereGeometry(1, 64, 48);
+  { const pp = bodyGeo.attributes.position, cols = [], fc = col(P.face), bc = col(PP.base).multiplyScalar(.8);
+    for (let i = 0; i < pp.count; i++) {
+      const x = pp.getX(i), y = pp.getY(i);
+      const back = clamp((edgeAt(y) - x) / .1, 0, 1) * clamp((y + .42) / .1, 0, 1);
+      const cc = fc.clone().lerp(bc, back); cols.push(cc.r, cc.g, cc.b);
+    }
+    bodyGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3)); }
+  body.add(mesh(bodyGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .7 }), { p: c, s: r }));
+
+  // spikes cover the top, back and sides; the face and belly stay smooth
+  const N = Math.round(110 + 170 * k), len = .17 + .15 * k, rad = .1 + .04 * k;
   const pts = [];
-  while (pts.length < 2100) {
-    const v = V3(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1);
-    const l = v.length(); if (l > 1 || l < .1) continue;
-    v.divideScalar(l);
-    if (v.y < -.18) continue;                    // belly has fur, not quills
-    if (v.x > .58 && v.y < .52) continue;        // leave the face clear
-    const p = V3(BC.x + v.x * BR.x, BC.y + v.y * BR.y, BC.z + v.z * BR.z);
-    const n = V3(v.x / BR.x, v.y / BR.y, v.z / BR.z).normalize();
-    const len = (.36 + rnd() * .12) * (1 - Math.max(0, v.x - .25) * .55) * (v.y < .05 ? .7 : 1);
-    pts.push({ p, n, len });
+  const M = Math.round(N / .56), GA = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < M; i++) { // golden-angle spiral gives an even, tidy coat
+    const y = 1 - 2 * (i + .5) / M, rr = Math.sqrt(1 - y * y), th = i * GA;
+    const v = V3(Math.cos(th) * rr, y, Math.sin(th) * rr).add(V3((rnd() - .5) * .04, (rnd() - .5) * .04, (rnd() - .5) * .04)).normalize();
+    if (v.y < -.42) continue;
+    if (v.x > edgeAt(v.y) - .02) continue;
+    const p = V3(c.x + v.x * r.x, c.y + v.y * r.y, c.z + v.z * r.z);
+    const n = V3(v.x / r.x, v.y / r.y, v.z / r.z).normalize();
+    pts.push({ p, n, len: len * (.85 + rnd() * .3) * (v.y < -.15 ? .75 : 1), rad: rad * (.9 + rnd() * .2) });
   }
-  const lying = quillField(qGeo, qMat, pts, 'lying', rnd), raised = quillField(qGeo, qMat, pts, 'raised', rnd);
+  let guard = 0;
+  const lying = spikeField(pts, PP, 'lying', rnd), raised = spikeField(pts, PP, 'raised', rnd);
   raised.visible = false;
-  stand.add(lying, raised);
+  body.add(lying, raised);
 
-  // head: round furry face with full cheeks, a soft snout ending in a lighter muzzle and a wet nose
-  const head = new THREE.Group(); head.position.set(.62, .44, 0); stand.add(head);
-  const S1 = new THREE.SphereGeometry(1, 36, 26);
-  head.add(mesh(S1, face, { p: V3(.1, .01, 0), s: V3(.37, .33, .35) }));
-  for (const z of [-1, 1]) head.add(mesh(S1, face, { p: V3(.27, -.1, .14 * z), s: V3(.17, .14, .13) }));
-  head.add(mesh(S1, face, { p: V3(.42, -.07, 0), s: V3(.25, .135, .145) }));
-  head.add(mesh(S1, muzzle, { p: V3(.56, -.085, 0), s: V3(.115, .088, .098) }));
-  const nose = mesh(new THREE.SphereGeometry(.05, 22, 16), glossy('#1b1515'), { p: V3(.655, -.08, 0), s: V3(.9, .8, 1.15) });
-  head.add(nose);
-  for (const z of [-1, 1]) nose.add(mesh(new THREE.SphereGeometry(.012, 8, 6), std('#050404', { roughness: .9 }), { p: V3(.04, -.012, .018 * z), cast: false }));
-  // eyes sit on the surface of the face so they read as bright beads, each with a catchlight
+  // face: big eyes (closed for the youngest), pink cheeks, snout, nose, smile, ears
+  const eyeR = .13 - .02 * k, closed = stage <= 2;
   const eyes = [];
   for (const z of [-1, 1]) {
-    const e = new THREE.Group(); e.position.set(.315, .08, .245 * z); head.add(e); eyes.push(e);
-    e.add(mesh(new THREE.SphereGeometry(.056, 22, 16), glossy(c.eye), { cast: false }));
-    e.add(mesh(new THREE.SphereGeometry(.014, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }), { p: V3(.03, .028, .03 * z), cast: false }));
-    e.add(mesh(new THREE.TorusGeometry(.058, .009, 8, 24, Math.PI), face, { r: [0, z > 0 ? 0 : Math.PI, 0], p: V3(0, .004, 0), cast: false }));
-    // round ears with pink insides
-    const ear = new THREE.Group(); ear.position.set(.02, .27, .2 * z); ear.rotation.set(z * -.55, 0, .15); head.add(ear);
-    ear.add(mesh(S1, face, { s: V3(.075, .095, .04) }));
-    ear.add(mesh(S1, pink, { p: V3(.012, -.005, .012 * z), s: V3(.05, .068, .022), cast: false }));
-    // a small closed-mouth smile under the snout
-    const curve = new THREE.QuadraticBezierCurve3(V3(.46, -.155, .075 * z), V3(.53, -.175, .06 * z), V3(.6, -.15, .03 * z));
-    head.add(mesh(new THREE.TubeGeometry(curve, 10, .006, 5), std('#3a2620'), { cast: false }));
+    const e = onSurface(body, c, r, V3(.8, .2, .42 * z), .005);
+    if (closed) {
+      e.add(mesh(new THREE.TorusGeometry(eyeR * .7, .016, 6, 18, Math.PI), dark, { r: [0, 0, Math.PI], cast: false }));
+    } else {
+      const ball3 = mesh(new THREE.SphereGeometry(eyeR, 28, 20), glossy(c0.eye === '#a32a3d' ? '#7a1d2c' : '#140e0b'), { s: V3(1, 1, .6), cast: false });
+      e.add(ball3);
+      const hl = new THREE.Group(); e.add(hl);
+      const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      hl.add(mesh(new THREE.SphereGeometry(eyeR * .3, 12, 10), white, { p: V3(eyeR * .3 * -z, eyeR * .38, eyeR * .5), cast: false }));
+      hl.add(mesh(new THREE.SphereGeometry(eyeR * .13, 10, 8), white, { p: V3(eyeR * .32 * z, -eyeR * .3, eyeR * .52), cast: false }));
+      eyes.push(e);
+    }
+    const ch = onSurface(body, c, r, V3(.72, -.08, .58 * z), .005);
+    ch.add(mesh(new THREE.SphereGeometry(.085, 16, 12), cheek, { s: V3(1.15, .8, .3), cast: false }));
+    const ear = onSurface(body, c, r, V3(.5, .72, .52 * z), .07);
+    ear.add(mesh(new THREE.SphereGeometry(.12 + .02 * k, 18, 14), cream, { s: V3(1, 1, .55) }));
+    ear.add(mesh(new THREE.SphereGeometry(.08 + .012 * k, 16, 12), pink, { p: V3(0, 0, .04), s: V3(1, 1, .4), cast: false }));
   }
-  const wpos = [];
-  for (const z of [-1, 1]) for (let i = 0; i < 4; i++) wpos.push(.58, -.08, .07 * z, .76 + i * .02, -.13 + i * .05, (.25 + i * .03) * z);
-  const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wpos, 3));
-  head.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x3a2a22, transparent: true, opacity: .45 })));
-  const foam = new THREE.Group(); foam.visible = false; stand.add(foam);
-  for (let i = 0; i < 14; i++) foam.add(mesh(new THREE.SphereGeometry(.035 + rnd() * .03, 10, 8), std('#ffffff', { roughness: .3, transparent: true, opacity: .9 }), { p: V3(-.5 + rnd() * .8, .85 + rnd() * .25, (rnd() - .5) * .7), cast: false }));
-  foam.add(mesh(new THREE.SphereGeometry(.04, 10, 8), std('#ffffff'), { p: V3(1.27, .32, .05), cast: false }));
+  const sn = onSurface(body, c, r, V3(1, -.16, 0), -.02);
+  sn.add(mesh(new THREE.SphereGeometry(.16 + .03 * k, 24, 18), light, { s: V3(.95, .78, 1.05 + .25 * k) }));
+  const nose = mesh(new THREE.SphereGeometry(.055 + .01 * k, 18, 14), glossy('#17100d'), { p: V3(0, .03, .16 + .07 * k), s: V3(1.15, .85, .8) });
+  sn.add(nose);
+  nose.add(mesh(new THREE.SphereGeometry(.014, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), { p: V3(-.015, .02, .03), cast: false }));
+  const smile = new THREE.QuadraticBezierCurve3(V3(-.05, -.07, .12 + .05 * k), V3(0, -.1, .135 + .05 * k), V3(.05, -.07, .12 + .05 * k));
+  sn.add(mesh(new THREE.TubeGeometry(smile, 12, .009, 6), dark, { cast: false }));
 
-  // four short legs with pink feet
+  // short round feet
   const legs = [];
-  for (const [x, z, ph] of [[.42, .3, 0], [.42, -.3, Math.PI], [-.42, .32, Math.PI], [-.42, -.32, 0]]) {
-    const g = new THREE.Group(); g.position.set(x, .2, z); g.userData.ph = ph;
-    g.add(mesh(new THREE.CylinderGeometry(.055, .045, .2, 10), skin, { p: V3(0, -.1, 0) }));
-    g.add(mesh(new THREE.SphereGeometry(1, 12, 8), skin, { p: V3(.04, -.2, 0), s: V3(.08, .03, .06) }));
-    stand.add(g); legs.push(g);
+  for (const [x, z, ph] of [[.3, .26, 0], [.3, -.26, Math.PI], [-.3, .28, Math.PI], [-.3, -.28, 0]]) {
+    const f = new THREE.Group(); f.position.set(x * (1 + .2 * k), .06, z); f.userData = { ph, bx: f.position.x };
+    f.add(mesh(new THREE.SphereGeometry(.09, 14, 10), std(P.ear, { roughness: .7 }), { s: V3(1.25, .65, 1) }));
+    stand.add(f); legs.push(f);
   }
 
-  // rolled-up ball: quills point out all round, only the tip of the snout shows
-  ball.add(mesh(new THREE.SphereGeometry(.5, 32, 24), std(c.dark, { roughness: 1 }), { p: V3(0, .5, 0) }));
+  const foam = new THREE.Group(); foam.visible = false; body.add(foam);
+  for (let i = 0; i < 14; i++) foam.add(mesh(new THREE.SphereGeometry(.035 + rnd() * .03, 10, 8), std('#ffffff', { roughness: .3, transparent: true, opacity: .9 }), { p: V3(-.3 + rnd() * .5, c.y + r.y * .9 + rnd() * .15, (rnd() - .5) * .6), cast: false }));
+
+  // rolled into a ball: spikes all round, the face tucked in with closed eyes
+  const bc = V3(0, .4, 0), br = V3(.4, .38, .4);
+  ball.add(mesh(new THREE.SphereGeometry(1, 36, 28), std(PP.base, { roughness: .9 }), { p: bc, s: br }));
   const bpts = [];
-  while (bpts.length < 1700) {
+  guard = 0;
+  while (bpts.length < N + 30 && guard++ < 20000) {
     const v = V3(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1);
     const l = v.length(); if (l > 1 || l < .1) continue;
     v.divideScalar(l);
-    if (v.y < -.8 || (v.x > .55 && v.y < -.15 && v.y > -.6 && Math.abs(v.z) < .35)) continue;
-    bpts.push({ p: V3(v.x * .5, .5 + v.y * .5, v.z * .5), n: v.clone(), len: .34 + rnd() * .1 });
+    if (v.y < -.75 || (v.x > .55 && v.y < .1 && v.y > -.7 && Math.abs(v.z) < .45)) continue;
+    bpts.push({ p: V3(bc.x + v.x * br.x, bc.y + v.y * br.y, bc.z + v.z * br.z), n: v.clone(), len: len * .7 * (.85 + rnd() * .3), rad: rad * .85 });
   }
-  ball.add(quillField(qGeo, qMat, bpts, 'radial', rnd));
-  ball.add(mesh(new THREE.SphereGeometry(1, 20, 14), face, { p: V3(.42, .24, 0), s: V3(.14, .1, .12) }));
-  ball.add(mesh(new THREE.SphereGeometry(.035, 12, 10), glossy('#141010'), { p: V3(.55, .22, 0) }));
+  ball.add(spikeField(bpts, PP, 'radial', rnd));
+  const peek = onSurface(ball, bc, br, V3(.85, -.32, 0), -.01);
+  peek.add(mesh(new THREE.SphereGeometry(.17, 20, 14), cream, { s: V3(1.1, .85, .45) }));
+  for (const z of [-1, 1]) peek.add(mesh(new THREE.TorusGeometry(.035, .009, 6, 12, Math.PI), dark, { p: V3(.07 * z, .05, .08), r: [0, 0, Math.PI], cast: false }));
+  peek.add(mesh(new THREE.SphereGeometry(.04, 12, 10), glossy('#17100d'), { p: V3(0, -.04, .1) }));
   ball.visible = false;
 
-  root.traverse((o) => { if (o.isMesh) o.castShadow = o.castShadow !== false; });
-  return { root, stand, ball, head, nose, eyes, legs, lying, raised, foam, coat: coatKey };
+  return { root, stand, ball, head: body, nose, eyes, legs, lying, raised, foam, coat: coatKey + '|' + stage, pitchK: .45, yawK: .55 };
 }
 
 function poseHog(h, pose, t, dt) {
@@ -625,7 +653,7 @@ function poseHog(h, pose, t, dt) {
   h.foam.visible = pose === 'ant';
   const walk = pose === 'walk', run = pose === 'run';
   const f = run ? 26 : 11, amp = run ? .75 : walk ? .5 : 0;
-  h.legs.forEach((g) => { g.rotation.z = amp * Math.sin(t * f + g.userData.ph); });
+  h.legs.forEach((g) => { const w = Math.sin(t * f + g.userData.ph); g.position.x = g.userData.bx + amp * .09 * w; g.position.y = .06 + Math.max(0, w) * amp * .06; });
   h.stand.position.y = walk || run ? Math.abs(Math.sin(t * f)) * (run ? .035 : .02) : 0;
   h.stand.position.x = pose === 'huff' ? Math.sin(t * 38) * .012 : 0;
   let pitch = 0, yaw = 0;
@@ -634,12 +662,15 @@ function poseHog(h, pose, t, dt) {
   else if (pose === 'ant') { yaw = 1.25; pitch = .3 + Math.sin(t * 6) * .08; }
   else if (pose === 'stand') { pitch = Math.sin(t * 1.3) * .1 + .04; yaw = Math.sin(t * .6) * .35; }
   else if (walk) pitch = Math.sin(t * 2.2) * .06 - .05;
+  pitch *= h.pitchK || 1; yaw *= h.yawK || 1;
   h.head.rotation.z += (pitch - h.head.rotation.z) * Math.min(1, dt * 6);
   h.head.rotation.y += (yaw - h.head.rotation.y) * Math.min(1, dt * 4);
   const sn = 1 + (pose === 'stand' || walk ? Math.max(0, Math.sin(t * 14)) * .12 * (Math.sin(t * 1.7) > .2 ? 1 : 0) : 0);
-  h.nose.scale.set(sn, .85 * sn, 1.05 * sn);
+  const ns = h.nose.userData.s || (h.nose.userData.s = h.nose.scale.clone());
+  h.nose.scale.copy(ns).multiplyScalar(sn);
   const blink = (t % 4.6) < .12 ? .15 : 1;
-  h.eyes.forEach((e) => { e.children[0].scale.y = blink; e.children[1].visible = blink > .5; });
+  const lid = pose === 'huff' ? .35 : blink;
+  h.eyes.forEach((e) => { e.children[0].scale.y = lid; e.children[1].visible = lid > .5; });
   h.ball.scale.set(1 + Math.sin(t * 1.5) * .015, 1 - Math.sin(t * 1.5) * .02, 1 + Math.sin(t * 1.5) * .015);
   if (pose === 'ball' && !S.torpor) h.ball.position.x = Math.sin(t * 30) * .006; else h.ball.position.x = 0;
 }
@@ -895,7 +926,7 @@ function updateProps(dt = 0) {
 }
 
 /* ---------- where the hedgehog goes, without passing through things ---------- */
-const hogScale = () => .62 + .38 * clamp((S.weight - 120) / 280, 0, 1);
+const hogScale = () => .55 + .45 * (stageOf(S) - 1) / (STAGE_MAX - 1);
 const OBST = [
   { kind: 'bowl', x: FOOD.x, z: FOOD.z, r: .64 }, { kind: 'bowl', x: WATER.x, z: WATER.z, r: .64 },
   { kind: 'wheel', box: [1.4, 4.5, -1.35, .3], x: 2.95, z: -.52, r: 1.65 },
@@ -966,9 +997,10 @@ const easeIO = (k) => (k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 
 function driveHog(now, dt) {
   const H = R.H, s = hogScale();
-  if (!R.hog || R.hog.coat !== S.morph) {
+  const stg = stageOf(S);
+  if (!R.hog || R.hog.coat !== S.morph + '|' + stg) {
     if (R.hog) R.scene.remove(R.hog.root);
-    R.hog = buildHog(S.morph); R.scene.add(R.hog.root);
+    R.hog = buildHog(S.morph, stg); R.scene.add(R.hog.root);
   }
   const hog = R.hog;
   // hands slide up into view while the hedgehog is held, and back down afterwards
@@ -1376,7 +1408,7 @@ function render() {
   const now = Date.now();
   const aw = ageWeeks(S, now), tw = targetWeight(aw);
   $('name').textContent = S.name;
-  $('meta').textContent = `아프리카 피그미 고슴도치 · ${COATS[S.morph].label} · ${S.sex === 'f' ? '암컷' : '수컷'} · ${ageText(aw)}`;
+  $('meta').textContent = `${COATS[S.morph].label} · ${S.sex === 'f' ? '암컷' : '수컷'} · ${ageText(aw)} · 성장 ${stageOf(S, now)}/${STAGE_MAX}단계`;
   $('capTime').textContent = hhmm(now) + (isNight(now) ? ' · 밤' : ' · 낮');
   $('capAct').textContent = T.mode === 'fx' ? T.fxLabel : T.mode === 'hand' ? '손 위에 올려 둔 중' : T.mode === 'out' ? '거실 산책 중' : ACT_TEXT[S.act] || '관찰 중';
 
@@ -1860,7 +1892,7 @@ function showPicker() {
   const cards = list.map((h) => {
     const c = COATS[h.morph] || COATS.sp, need = h.torpor || h.mites || h.health < 40 || h.food < 1 || h.water < 10;
     return `<button class="pick${adopted && h.id === S.id ? ' on' : ''}" type="button" data-id="${h.id}">${swatch(c)}
-      <span class="pt"><b>${esc(h.name)}</b><span>${c.label} · ${h.sex === 'f' ? '암컷' : '수컷'} · ${ageText(ageWeeks(h, now))}</span>
+      <span class="pt"><b>${esc(h.name)}</b><span>${c.label} · ${h.sex === 'f' ? '암컷' : '수컷'} · ${ageText(ageWeeks(h, now))} · ${stageOf(h, now)}단계</span>
       <span class="${need ? 'need' : ''}">${lastSeen(h.last)}${need ? ' · 돌봄이 필요할 수 있어요' : ''}</span></span></button>`;
   }).join('');
   openSheet(`<h3>어떤 고슴도치를 돌볼까요?</h3>
