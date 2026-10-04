@@ -665,15 +665,31 @@ function buildHog(coatKey, stage = STAGE_MAX) {
 // One sculpted model per growth stage. The files have no animations, so parts are moved by name: legs swing for walking, eyes blink,
 // quills puff up when huffing, and a tucked copy with hidden legs stands in for the curled ball.
 const glbFile = (stage) => `models/hedgehog-stage-${String(clamp(stage, 1, 10)).padStart(2, '0')}.glb`;
+const HOG_VIA_SCRIPT = false;
 const HOG_TINT = { sp: '#ffffff', cinnamon: '#ffd2a8', chocolate: '#8f6f5c', albino: '#ffffff' };
 const glbCache = {};
 function loadHogModel(stage) {
   const f = glbFile(stage);
   if (!THREE.GLTFLoader) return null;
   if (!glbCache[f]) {
-    glbCache[f] = { scene: null, failed: false };
-    new THREE.GLTFLoader().load(f, (g) => { glbCache[f].scene = g.scene; if (R) R.hogKey = null; },
-      undefined, (e) => { console.warn('hedgehog model failed to load, using the built-in one', e); glbCache[f].failed = true; });
+    const entry = glbCache[f] = { scene: null, failed: false };
+    const done = (g) => { entry.scene = g.scene; if (R) R.hogKey = null; };
+    const fail = (e) => { console.warn('hedgehog model failed to load, using the built-in one', e); entry.failed = true; };
+    if (HOG_VIA_SCRIPT) {
+      // where pages may not fetch files, each model ships as a script that stores the .glb as base64
+      const n = f.match(/(\d+)\.glb$/)[1], el = document.createElement('script');
+      el.src = f.replace(/\.glb$/, '.js');
+      el.onload = () => {
+        try {
+          const bin = atob((window.HOG_GLB || {})[n] || ''), buf = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+          new THREE.GLTFLoader().parse(buf.buffer, '', done, fail);
+          delete window.HOG_GLB[n];
+        } catch (e) { fail(e); }
+      };
+      el.onerror = fail;
+      document.head.appendChild(el);
+    } else new THREE.GLTFLoader().load(f, done, undefined, fail);
   }
   return glbCache[f].scene;
 }
