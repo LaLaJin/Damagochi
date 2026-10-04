@@ -67,6 +67,10 @@ button { font: inherit; color: inherit; }
 #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 #gl:active { cursor: grabbing; }
 .scene.holding .cap { display: none; }
+.fade { position: absolute; inset: 0; z-index: 6; background: #f6f3ec; display: grid; place-items: center; color: #4a463f; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .6s; }
+.fade.on { opacity: 1; }
+.act.fired { animation: fired .8s ease-out; }
+@keyframes fired { 0% { box-shadow: 0 0 0 0 var(--accent); border-color: var(--accent); } 100% { box-shadow: 0 0 0 12px transparent; } }
 .nogl { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: #5d574e; font-size: 13px; }
 .sw { width: 44px; height: 44px; border-radius: 50%; box-shadow: inset 0 -3px 6px rgba(0,0,0,.25); }
 .cap { position: absolute; left: 10px; top: 10px; right: 100px; display: flex; gap: 6px; flex-wrap: wrap; pointer-events: none; }
@@ -206,6 +210,7 @@ button { font: inherit; color: inherit; }
     <div class="cap"><span id="capTime">--:--</span><span id="capAct">관찰 중</span></div>
     <button class="zoom" id="zoomBtn" type="button">따라가며 보기</button>
     <div id="overlay"></div>
+    <div class="fade" id="fade"><span></span></div>
   </section>
 
   <section class="vitals" aria-label="측정값">
@@ -424,9 +429,9 @@ const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const BED = .3;                                        // bedding surface height
 const IGLOO = V3(-3.0, BED, -.8), IGLOO_R = 1.15;
 const IGLOO_IN = V3(-3.0, BED, -.95), IGLOO_DOOR = V3(-3.0, BED, .75);
-const FOOD = V3(-.5, BED, 1.25), WATER = V3(1.1, BED, 1.3);
-const WHEEL_C = V3(2.95, 1.85, -.4), WHEEL_R = 1.45, WHEEL_ENTRY = V3(1.25, BED, .55);
-const CORNER = V3(4.0, BED, 1.85);
+const FOOD = V3(-1.2, BED, 1.45), WATER = V3(.6, BED, 1.45);
+const WHEEL_C = V3(2.95, 1.85, -.4), WHEEL_R = 1.45, WHEEL_ENTRY = V3(1.6, BED, .45);
+const CORNER = V3(3.7, BED, 1.6);
 const HAND = V3(0, 2.6, 4.1);
 let R = null;
 
@@ -497,7 +502,14 @@ function buildHog(coatKey) {
   const rnd = seeded(21);
   const root = new THREE.Group(), stand = new THREE.Group(), ball = new THREE.Group();
   root.add(stand, ball);
-  const skin = std(c.skin, { roughness: .7 }), face = std(c.face, { roughness: .95 }), belly = std(c.belly, { roughness: 1 });
+  const fur = (hex, seed) => canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = hex; g.fillRect(0, 0, w, h); const rr = seeded(seed);
+    for (let i = 0; i < 3200; i++) { const x = rr() * w, y = rr() * h, l = 2 + rr() * 5, a = rr() * .7 - .35; g.strokeStyle = rr() < .55 ? 'rgba(255,255,255,.16)' : 'rgba(70,45,30,.11)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+  });
+  const skin = std(c.skin, { roughness: .7 }), pink = std('#e9a9a0', { roughness: .6 });
+  const face = new THREE.MeshStandardMaterial({ map: fur(c.face, 31), roughness: 1 });
+  const muzzle = new THREE.MeshStandardMaterial({ map: fur('#' + col(c.face).convertLinearToSRGB().lerp(new THREE.Color(1, 1, 1), .35).getHexString(), 32), roughness: 1 });
+  const belly = new THREE.MeshStandardMaterial({ map: fur(c.belly, 33), roughness: 1 });
   const glossy = (hex) => std(hex, { roughness: .12, metalness: .1 });
   const qMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .55, metalness: .02 });
   const qGeo = quillGeometry(c);
@@ -522,23 +534,35 @@ function buildHog(coatKey) {
   raised.visible = false;
   stand.add(lying, raised);
 
-  // head: rounded face tapering into a long snout, glossy nose and bead eyes
-  const head = new THREE.Group(); head.position.set(.64, .44, 0); stand.add(head);
-  head.add(mesh(new THREE.SphereGeometry(1, 32, 24), face, { p: V3(.1, 0, 0), s: V3(.36, .31, .33) }));
-  head.add(mesh(new THREE.SphereGeometry(1, 28, 20), face, { p: V3(.4, -.07, 0), s: V3(.32, .155, .165) }));
-  head.add(mesh(new THREE.SphereGeometry(1, 20, 14), std(c.mask, { roughness: 1, transparent: true, opacity: .5 }), { p: V3(.3, .06, 0), s: V3(.16, .1, .27), cast: false }));
-  const nose = mesh(new THREE.SphereGeometry(.05, 18, 14), glossy('#141010'), { p: V3(.71, -.075, 0), s: V3(1, .85, 1.05) });
+  // head: round furry face with full cheeks, a soft snout ending in a lighter muzzle and a wet nose
+  const head = new THREE.Group(); head.position.set(.62, .44, 0); stand.add(head);
+  const S1 = new THREE.SphereGeometry(1, 36, 26);
+  head.add(mesh(S1, face, { p: V3(.1, .01, 0), s: V3(.37, .33, .35) }));
+  for (const z of [-1, 1]) head.add(mesh(S1, face, { p: V3(.27, -.1, .14 * z), s: V3(.17, .14, .13) }));
+  head.add(mesh(S1, face, { p: V3(.42, -.07, 0), s: V3(.25, .135, .145) }));
+  head.add(mesh(S1, muzzle, { p: V3(.56, -.085, 0), s: V3(.115, .088, .098) }));
+  const nose = mesh(new THREE.SphereGeometry(.05, 22, 16), glossy('#1b1515'), { p: V3(.655, -.08, 0), s: V3(.9, .8, 1.15) });
   head.add(nose);
+  for (const z of [-1, 1]) nose.add(mesh(new THREE.SphereGeometry(.012, 8, 6), std('#050404', { roughness: .9 }), { p: V3(.04, -.012, .018 * z), cast: false }));
+  // eyes sit on the surface of the face so they read as bright beads, each with a catchlight
   const eyes = [];
-  for (const z of [-.175, .175]) {
-    const e = mesh(new THREE.SphereGeometry(.043, 18, 14), glossy(c.eye), { p: V3(.33, .07, z) });
-    head.add(e); eyes.push(e);
-    head.add(mesh(new THREE.SphereGeometry(1, 16, 12), skin, { p: V3(.02, .24, z * 1.12), s: V3(.05, .085, .07), r: [z > 0 ? -.4 : .4, 0, 0] }));
+  for (const z of [-1, 1]) {
+    const e = new THREE.Group(); e.position.set(.315, .08, .245 * z); head.add(e); eyes.push(e);
+    e.add(mesh(new THREE.SphereGeometry(.056, 22, 16), glossy(c.eye), { cast: false }));
+    e.add(mesh(new THREE.SphereGeometry(.014, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }), { p: V3(.03, .028, .03 * z), cast: false }));
+    e.add(mesh(new THREE.TorusGeometry(.058, .009, 8, 24, Math.PI), face, { r: [0, z > 0 ? 0 : Math.PI, 0], p: V3(0, .004, 0), cast: false }));
+    // round ears with pink insides
+    const ear = new THREE.Group(); ear.position.set(.02, .27, .2 * z); ear.rotation.set(z * -.55, 0, .15); head.add(ear);
+    ear.add(mesh(S1, face, { s: V3(.075, .095, .04) }));
+    ear.add(mesh(S1, pink, { p: V3(.012, -.005, .012 * z), s: V3(.05, .068, .022), cast: false }));
+    // a small closed-mouth smile under the snout
+    const curve = new THREE.QuadraticBezierCurve3(V3(.46, -.155, .075 * z), V3(.53, -.175, .06 * z), V3(.6, -.15, .03 * z));
+    head.add(mesh(new THREE.TubeGeometry(curve, 10, .006, 5), std('#3a2620'), { cast: false }));
   }
   const wpos = [];
-  for (const z of [-1, 1]) for (let i = 0; i < 4; i++) wpos.push(.6, -.08, .06 * z, .78 + i * .02, -.13 + i * .05, (.24 + i * .03) * z);
+  for (const z of [-1, 1]) for (let i = 0; i < 4; i++) wpos.push(.58, -.08, .07 * z, .76 + i * .02, -.13 + i * .05, (.25 + i * .03) * z);
   const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wpos, 3));
-  head.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x3a2a22, transparent: true, opacity: .5 })));
+  head.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x3a2a22, transparent: true, opacity: .45 })));
   const foam = new THREE.Group(); foam.visible = false; stand.add(foam);
   for (let i = 0; i < 14; i++) foam.add(mesh(new THREE.SphereGeometry(.035 + rnd() * .03, 10, 8), std('#ffffff', { roughness: .3, transparent: true, opacity: .9 }), { p: V3(-.5 + rnd() * .8, .85 + rnd() * .25, (rnd() - .5) * .7), cast: false }));
   foam.add(mesh(new THREE.SphereGeometry(.04, 10, 8), std('#ffffff'), { p: V3(1.27, .32, .05), cast: false }));
@@ -592,7 +616,7 @@ function poseHog(h, pose, t, dt) {
   const sn = 1 + (pose === 'stand' || walk ? Math.max(0, Math.sin(t * 14)) * .12 * (Math.sin(t * 1.7) > .2 ? 1 : 0) : 0);
   h.nose.scale.set(sn, .85 * sn, 1.05 * sn);
   const blink = (t % 4.6) < .12 ? .15 : 1;
-  h.eyes.forEach((e) => { e.scale.y = blink; });
+  h.eyes.forEach((e) => { e.children[0].scale.y = blink; e.children[1].visible = blink > .5; });
   h.ball.scale.set(1 + Math.sin(t * 1.5) * .015, 1 - Math.sin(t * 1.5) * .02, 1 + Math.sin(t * 1.5) * .015);
   if (pose === 'ball' && !S.torpor) h.ball.position.x = Math.sin(t * 30) * .006; else h.ball.position.x = 0;
 }
@@ -660,7 +684,8 @@ function buildRoom(scene) {
   });
   const bedGeo = new THREE.PlaneGeometry(CW - .06, CD - .06, 48, 26);
   { const pp = bedGeo.attributes.position, rr = seeded(12); for (let i = 0; i < pp.count; i++) pp.setZ(i, (rr() - .5) * .05 + Math.sin(pp.getX(i) * 2.1) * .015); bedGeo.computeVertexNormals(); }
-  cage.add(mesh(bedGeo, new THREE.MeshStandardMaterial({ map: bedTex, roughness: 1 }), { p: V3(0, BED - .02, 0), r: [-Math.PI / 2, 0, 0], recv: true, cast: false }));
+  const bedMat = new THREE.MeshStandardMaterial({ map: bedTex, roughness: 1 });
+  cage.add(mesh(bedGeo, bedMat, { p: V3(0, BED - .02, 0), r: [-Math.PI / 2, 0, 0], recv: true, cast: false }));
 
   // igloo hide: translucent dome with the doorway facing the front
   const igloo = mesh(new THREE.SphereGeometry(IGLOO_R, 44, 22, 0, Math.PI * 2, 0, Math.PI / 2),
@@ -725,7 +750,7 @@ function buildRoom(scene) {
     palm.add(mesh(new THREE.CylinderGeometry(.42, .48, 2.4, 18), handMat, { p: V3(0, -.2, 1.75), r: [Math.PI / 2 - .15, 0, 0] }));
   }
 
-  return { sky, skyTex, clk, clkTex, wheel, wheelPoops, kib, water, thermo, bulbMat, poops, shed, hands, lampG };
+  return { bedMat, sky, skyTex, clk, clkTex, wheel, wheelPoops, kib, water, thermo, bulbMat, poops, shed, hands, lampG };
 }
 
 /* ---------- renderer, lights, camera ---------- */
@@ -781,7 +806,7 @@ const SKY = [ // hour, top, bottom, sky light, sun intensity, ambient
 ];
 function skyAt(h) { for (let i = SKY.length - 1; i >= 0; i--) if (h >= SKY[i][0]) return SKY[i]; return SKY[0]; }
 let lastSkyKey = '';
-function updateEnvironment(now) {
+function updateEnvironment(now, dt = 0) {
   const h = hourOf(now), sk = skyAt(h), night = h >= 19.5 || h < 6;
   const key = sk[0] + '|' + Math.floor(now / MIN);
   if (key !== lastSkyKey) {
@@ -807,25 +832,29 @@ function updateEnvironment(now) {
     R.lamp.intensity = night ? .9 : h >= 18 || h < 7 ? .5 : 0;
     R.scene.background = col(night ? '#2a2a2e' : '#d9d2c6');
   }
-  R.heat.intensity = S.heater ? 1.3 : 0;
-  R.room.bulbMat.emissive.copy(S.heater ? col('#ff7a2e') : col('#000000'));
-  R.room.bulbMat.emissiveIntensity = S.heater ? 1.4 : 0;
+  if (R.heatK === undefined) R.heatK = S.heater ? 1 : 0;
+  R.heatK = clamp(R.heatK + ((S.heater ? 1 : 0) - R.heatK) * Math.min(1, dt * .55), 0, 1);
+  R.heat.intensity = 1.3 * R.heatK;
+  R.room.bulbMat.emissive.copy(col('#ff7a2e')).multiplyScalar(R.heatK);
+  R.room.bulbMat.emissiveIntensity = 1.4;
   R.room.thermo.scale.y = clamp((cageTemp(S, now) - 14) / 16, .05, 1);
 }
 
 /* ---------- sync props with the simulation ---------- */
 let propKey = '';
 const map3 = (p) => (p.p3 ? p : { x: (p.x - 134) / 252 * 8.4 - 4.2, z: (p.y - 250) / 8 * 3.4 - 1.4 });
-function updateProps() {
-  const key = [Math.round(S.food), Math.round(S.water), S.poops.length, S.shed.length].join('|');
+function updateProps(dt = 0) {
+  const wr0 = S.water / BOWL_WATER;
+  R.waterK = R.waterK === undefined ? wr0 : R.waterK + (wr0 - R.waterK) * Math.min(1, dt * 1.6);
+  R.room.water.visible = R.waterK > .02;
+  R.room.water.position.y = WATER.y + .09 + .15 * R.waterK;
+  R.room.water.scale.set(.82 + .18 * R.waterK, 1, .82 + .18 * R.waterK);
+  R.room.bedMat.color.setRGB(1, 1, 1).lerp(col('#c4ab7e'), clamp(S.dirt / 100, 0, 1) * .75);
+  const key = [Math.round(S.food), S.poops.length, S.shed.length].join('|');
   if (key === propKey) return;
   propKey = key;
   R.room.kib.count = Math.round(clamp(S.food / BOWL_FOOD, 0, 1) * 60);
   R.room.kib.instanceMatrix.needsUpdate = true;
-  const wr = S.water / BOWL_WATER;
-  R.room.water.visible = S.water > 2;
-  R.room.water.position.y = WATER.y + .09 + .15 * wr;
-  R.room.water.scale.set(.82 + .18 * wr, 1, .82 + .18 * wr);
   const poopGeo = new THREE.SphereGeometry(1, 10, 8), poopMat = std('#3a2a1e', { roughness: .6 });
   const clear = (g) => { while (g.children.length) g.remove(g.children[0]); };
   clear(R.room.poops); clear(R.room.wheelPoops); clear(R.room.shed);
@@ -842,22 +871,76 @@ function updateProps() {
   });
 }
 
-/* ---------- where the hedgehog goes ---------- */
+/* ---------- where the hedgehog goes, without passing through things ---------- */
 const hogScale = () => .62 + .38 * clamp((S.weight - 120) / 280, 0, 1);
+const OBST = [
+  { kind: 'bowl', x: FOOD.x, z: FOOD.z, r: .64 }, { kind: 'bowl', x: WATER.x, z: WATER.z, r: .64 },
+  { kind: 'wheel', box: [1.4, 4.5, -1.35, .3], x: 2.95, z: -.52, r: 1.65 },
+  { kind: 'igloo', x: IGLOO.x, z: IGLOO.z, r: IGLOO_R + .04 },
+];
+const CAGE_X = 4.42, CAGE_Z = 2.32;
+// The hedgehog is two circles: its body, and its head out in front. Push both out of bowls, the hide,
+// the wheel and the walls. Returns the obstacle that was hit, if any.
+function pushOut(p, yaw, s, ign, inCage) {
+  const fx = Math.cos(yaw), fz = -Math.sin(yaw);
+  let hit = null;
+  for (let pass = 0; pass < 2; pass++) {
+    for (const [off, rr] of [[0, .6 * s], [.85 * s, .3 * s]]) {
+      const cx = p.x + fx * off, cz = p.z + fz * off;
+      if (inCage) {
+        for (const o of OBST) {
+          if (ign && ign[o.kind]) continue;
+          if (o.box) {
+            const [x0, x1, z0, z1] = o.box, qx = clamp(cx, x0, x1), qz = clamp(cz, z0, z1);
+            const dx = cx - qx, dz = cz - qz, d = Math.hypot(dx, dz);
+            if (d < rr) {
+              if (d < 1e-4) { const e = [[cx - x0, -1, 0], [x1 - cx, 1, 0], [cz - z0, 0, -1], [z1 - cz, 0, 1]].sort((a, b) => a[0] - b[0])[0]; p.x += e[1] * (e[0] + rr); p.z += e[2] * (e[0] + rr); }
+              else { p.x += dx / d * (rr - d); p.z += dz / d * (rr - d); }
+              hit = o;
+            }
+            continue;
+          }
+          const dx = cx - o.x, dz = cz - o.z, d = Math.hypot(dx, dz) || 1e-4, min = o.r + rr;
+          if (d < min) { p.x += dx / d * (min - d); p.z += dz / d * (min - d); hit = o; }
+        }
+        const wx = CAGE_X - rr, wz = CAGE_Z - rr;
+        if (cx > wx) p.x -= cx - wx; if (cx < -wx) p.x += -wx - cx;
+        if (cz > wz) p.z -= cz - wz; if (cz < -wz) p.z += -wz - cz;
+      } else if (cz < CAGE_Z + .2 + rr) p.z += CAGE_Z + .2 + rr - cz; // on the floor: stay outside the cage
+    }
+  }
+  return hit;
+}
+function freeSpot(s, near) {
+  for (let i = 0; i < 60; i++) {
+    const p = near && i < 30 ? V3(near.x + rand(-1.5, 1.5), BED, near.z + rand(-1.2, 1.2)) : V3(rand(-4, 4), BED, rand(-1.9, 1.9));
+    const yaw = rand(0, 6.28), q = p.clone();
+    pushOut(q, yaw, s, null, true);
+    if (q.distanceTo(p) < .01) return p;
+  }
+  return V3(-.3, BED, .2);
+}
 function goalFor() {
   const s = hogScale();
   if (T.mode === 'out') return { p: V3(T.out.x, 0, T.out.z), pose: 'walk', free: true };
+  if (T.worm && !S.torpor) {
+    const w = T.worm.p, d = V3(w.x - R.H.pos.x, 0, w.z - R.H.pos.z); const dist = d.length() || 1;
+    return { p: V3(w.x - d.x / dist * 1.15 * s, BED, w.z - d.z / dist * 1.15 * s), yaw: Math.atan2(-d.z, d.x), pose: 'eat', worm: true };
+  }
+  // bowls are approached from behind so the head reaches over the rim without the body touching it
   switch (S.act) {
     case 'sleep': return { p: IGLOO_IN, yaw: -Math.PI / 2, pose: 'sleep', igloo: true };
     case 'torpor': return { p: CORNER, yaw: 2.3, pose: 'ball' };
     case 'wheel': return { p: WHEEL_ENTRY, yaw: 0, pose: 'run', wheel: true };
-    case 'eat': return { p: V3(FOOD.x - .62 - .62 * s, BED, FOOD.z), yaw: 0, pose: 'eat' };
-    case 'drink': return { p: V3(WATER.x - .62 - .62 * s, BED, WATER.z), yaw: 0, pose: 'drink' };
+    case 'eat': return { p: V3(FOOD.x, BED, FOOD.z - .64 - 1.16 * s), yaw: -Math.PI / 2, pose: 'eat' };
+    case 'drink': return { p: V3(WATER.x, BED, WATER.z - .64 - 1.16 * s), yaw: -Math.PI / 2, pose: 'drink' };
     case 'rest': return { p: null, pose: 'sleep' };
     default: return { roam: true };
   }
 }
 function angleTo(a, b) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
+const easeIO = (k) => (k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+
 function driveHog(now, dt) {
   const H = R.H, s = hogScale();
   if (!R.hog || R.hog.coat !== S.morph) {
@@ -865,68 +948,115 @@ function driveHog(now, dt) {
     R.hog = buildHog(S.morph); R.scene.add(R.hog.root);
   }
   const hog = R.hog;
-  R.room.hands.visible = T.mode === 'hand';
-  let pose;
+  // hands slide up into view while the hedgehog is held, and back down afterwards
+  const wantHands = T.mode === 'hand' || (T.stage && T.stage.hands) || (R.carry && R.carry.hands);
+  R.handsK = clamp((R.handsK || 0) + (wantHands ? dt : -dt) * 1.8, 0, 1);
+  R.room.hands.visible = R.handsK > .01;
+  R.room.hands.position.y = HAND.y - 2.4 * (1 - easeIO(R.handsK));
+  hog.root.scale.setScalar(s * (H.loc === 'hand' ? 1.05 : 1));
+
+  if (R.carry) { // lifted by the owner: an arc through the air, rolled up like a real hedgehog
+    const c = R.carry; c.t += dt;
+    const k = Math.min(1, c.t / c.dur), e = easeIO(k);
+    hog.root.position.lerpVectors(c.from, c.to, e);
+    hog.root.position.y += Math.sin(k * Math.PI) * c.lift;
+    if (c.yaw !== undefined) H.yaw += angleTo(H.yaw, c.yaw) * Math.min(1, dt * 4);
+    hog.root.rotation.y = H.yaw;
+    if (k >= 1) { R.carry = null; H.pos.copy(c.to); if (c.loc) H.loc = c.loc; H.goal = null; H.detour = null; c.res(); }
+    return { pose: c.pose || 'ball', focus: hog.root.position };
+  }
+  if (T.stage) {
+    const st = T.stage;
+    hog.root.position.copy(st.p);
+    if (st.yaw !== undefined) H.yaw += angleTo(H.yaw, st.yaw) * Math.min(1, dt * 3);
+    hog.root.rotation.y = H.yaw;
+    return { pose: st.pose, focus: st.p };
+  }
   if (T.mode === 'hand') {
     H.loc = 'hand'; H.inWheel = false;
-    hog.root.position.set(HAND.x, HAND.y + .22, HAND.z);
+    hog.root.position.set(HAND.x, R.room.hands.position.y + .22, HAND.z);
     const hs = T.hand ? T.hand.state : 'calm';
-    pose = { curl: 'ball', cold: 'ball', huff: 'huff', calm: 'stand', explore: 'walk', eat: 'eat', ant: 'ant' }[hs] || 'stand';
+    const pose = { curl: 'ball', cold: 'ball', huff: 'huff', calm: 'stand', explore: 'walk', eat: 'eat', ant: 'ant' }[hs] || 'stand';
     H.yaw += (hs === 'explore' ? dt * .5 : angleTo(H.yaw, -.6) * Math.min(1, dt * 3));
     hog.root.rotation.y = H.yaw;
-    hog.root.scale.setScalar(s * 1.05);
     return { pose, focus: HAND };
   }
-  if (T.mode === 'out' && H.loc !== 'out') { H.loc = 'out'; H.inWheel = false; H.pos.set(-1, 0, 3.4); }
-  if (!T.mode && H.loc !== 'cage') { H.loc = 'cage'; H.pos.set(0, BED, .6); H.goal = null; }
+  // fallbacks if the hedgehog somehow ended up elsewhere without being carried
+  if (T.mode === 'out' && H.loc !== 'out') { H.loc = 'out'; H.inWheel = false; H.pos.set(-1, 0, 3.6); }
+  if (!T.mode && H.loc !== 'cage') { H.loc = 'cage'; H.pos.copy(freeSpot(s)); H.goal = null; }
+  const inCage = H.loc === 'cage';
 
   const g = goalFor();
   if (H.inWheel && !g.wheel) { H.inWheel = false; H.pos.copy(WHEEL_ENTRY); }
-  let target = null, goalPose = 'stand', goalYaw = null;
+  let target = null, goalPose = 'stand', goalYaw;
   if (g.roam) {
-    if (!H.goal || (H.pos.distanceTo(H.goal) < .08 && now > H.wait)) {
-      if (!H.goal || now > H.wait + 2500) { H.goal = V3(rand(-1.4, 1.6), BED, rand(-1.6, 1.7)); H.wait = 0; }
-    }
+    if (!H.goal) { H.goal = freeSpot(s); H.wait = 0; }
     target = H.goal;
-    if (H.pos.distanceTo(H.goal) < .08 && !H.wait) H.wait = now + rand(1500, 4000);
   } else if (g.p) { target = g.p; goalPose = g.pose; goalYaw = g.yaw; H.goal = null; }
   else { goalPose = g.pose; H.goal = null; }
 
+  let pose;
   if (H.inWheel) {
     pose = 'run';
     hog.root.position.set(WHEEL_C.x, WHEEL_C.y - WHEEL_R + .04, WHEEL_C.z);
     H.yaw = 0; R.room.wheel.rotation.z -= dt * 2.6;
   } else if (target) {
-    // walk the doorway first when going into or out of the igloo
-    let t = target;
     const inside = H.pos.distanceTo(IGLOO_IN) < IGLOO_R * .9, wantsIn = !!g.igloo;
-    if (inside !== wantsIn && H.pos.distanceTo(IGLOO_DOOR) > .15) t = IGLOO_DOOR;
+    let t = target;
+    if (inCage && inside !== wantsIn && H.pos.distanceTo(IGLOO_DOOR) > .15) t = IGLOO_DOOR; // use the doorway
+    if (H.detour) { if (H.pos.distanceTo(H.detour) < .15) H.detour = null; else t = H.detour; }
     const d = V3(t.x - H.pos.x, 0, t.z - H.pos.z), dist = d.length();
-    if (dist > 7 || (!T.mode && document.hidden)) { H.pos.copy(target); }
-    else if (dist > .05) {
+    const goalDist = Math.hypot(target.x - H.pos.x, target.z - H.pos.z);
+    const arrived = goalDist < .08 || (H.stuck > .8 && goalDist < .7);
+    if (dist > 7 || document.hidden) { H.pos.copy(target); H.detour = null; }
+    else if (!arrived && dist > .02) {
       const step = Math.min(dist, (g.free ? .9 : .75) * s * dt * (S.act === 'wheel' ? 1.3 : 1));
-      H.pos.addScaledVector(d.normalize(), step);
       const want = Math.atan2(-d.z, d.x);
-      H.yaw += angleTo(H.yaw, want) * Math.min(1, dt * 5);
+      H.yaw += angleTo(H.yaw, want) * Math.min(1, dt * 6);
+      const before = H.pos.clone();
+      H.pos.addScaledVector(d.normalize(), step);
+      const ign = { igloo: wantsIn || inside, wheel: !!g.wheel };
+      const hit = pushOut(H.pos, H.yaw, s, ign, inCage);
+      const moved = H.pos.distanceTo(before);
+      H.stuck = moved < step * .35 ? (H.stuck || 0) + dt : 0;
+      if (hit && !H.detour) {
+        // step around the obstacle on the side that faces the goal
+        const ox = H.pos.x - hit.x, oz = H.pos.z - hit.z, l = Math.hypot(ox, oz) || 1;
+        const px = -oz / l, pz = ox / l, side = px * (target.x - H.pos.x) + pz * (target.z - H.pos.z) >= 0 ? 1 : -1;
+        const rad = hit.r + .9 * s, dx = ox / l * .4 + px * side, dz = oz / l * .4 + pz * side, dl = Math.hypot(dx, dz);
+        H.detour = V3(hit.x + dx / dl * rad, BED, hit.z + dz / dl * rad);
+        pushOut(H.detour, H.yaw, s, ign, true);
+      }
+      if (H.stuck > 1.6) { H.detour = null; if (g.roam) H.goal = freeSpot(s); H.stuck = 0; }
       pose = 'walk';
     }
     if (!pose) {
+      H.stuck = 0; H.detour = null;
       if (g.wheel) { H.inWheel = true; pose = 'run'; }
-      else { pose = g.roam ? 'stand' : goalPose; if (goalYaw !== null && goalYaw !== undefined) H.yaw += angleTo(H.yaw, goalYaw) * Math.min(1, dt * 4); }
+      else if (g.roam) {
+        pose = 'stand';
+        if (!H.wait) H.wait = now + rand(1500, 4500);
+        else if (now > H.wait) { H.goal = freeSpot(s); H.wait = 0; }
+      } else {
+        pose = goalPose;
+        if (goalYaw !== undefined) H.yaw += angleTo(H.yaw, goalYaw) * Math.min(1, dt * 4);
+        if (g.worm) eatWorm(dt);
+      }
     }
     hog.root.position.copy(H.pos);
   } else { pose = goalPose; hog.root.position.copy(H.pos); }
   if (now < T.antUntil && (pose === 'stand' || pose === 'walk')) pose = 'ant';
   hog.root.rotation.y = H.yaw;
-  hog.root.scale.setScalar(s);
   return { pose, focus: hog.root.position };
 }
 
 /* ---------- camera ---------- */
 function updateCamera(focus, dt) {
-  const C = R.cam, u = R.user;
+  const C = R.cam, u = R.user, now = Date.now();
   let tgt, dist, el = .3, az = 0;
-  if (T.mode === 'hand') { tgt = V3(HAND.x, HAND.y + .5, HAND.z); dist = 5.2; el = .45; az = .25; }
+  if (T.mode === 'hand' || (T.stage && T.stage.hands)) { tgt = V3(HAND.x, HAND.y + .5, HAND.z); dist = 5.2; el = .45; az = .25; }
+  else if (T.look && now < T.look.until) { tgt = T.look.p.clone().add(V3(0, .4, 0)); dist = T.look.dist || 5.6; el = .42; }
+  else if (T.mode === 'fx') { tgt = V3(focus.x, Math.max(.6, focus.y + .4), focus.z); dist = 7; el = .36; }
   else if (T.mode === 'out') { tgt = V3(focus.x * .5, .8, 3.2); dist = 12; el = .38; }
   else if (T.zoom) { tgt = V3(focus.x, focus.y + .55, focus.z); dist = 6; el = .34; }
   else { tgt = V3(.2, 1.5, .2); dist = 13.5; el = .2; }
@@ -943,12 +1073,262 @@ function frame(ts) {
   if (!R || !S || document.hidden) return;
   const dt = Math.min(.05, (ts - R.last) / 1000); R.last = ts; R.t += dt;
   const now = Date.now();
-  updateEnvironment(now);
-  updateProps();
+  updateEnvironment(now, dt);
+  updateProps(dt);
+  runFx(dt);
   const { pose, focus } = driveHog(now, dt);
   poseHog(R.hog, pose, R.t, dt);
   updateCamera(focus, dt);
   R.renderer.render(R.scene, R.camera);
+}
+
+/* ---------- care effects ---------- */
+const FX = [];
+function addFx(fn) { FX.push({ t: 0, fn }); }
+function runFx(dt) { for (let i = FX.length - 1; i >= 0; i--) { const f = FX[i]; f.t += dt; if (!f.fn(f.t, dt)) FX.splice(i, 1); } }
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+// Animate over dur seconds; also settles on a timer so a hidden tab never leaves an effect half-done.
+function tween(dur, fn) {
+  return new Promise((res) => {
+    let done = false;
+    const finish = () => { if (done) return; done = true; fn(1); res(); };
+    addFx((t) => { if (done) return false; const k = Math.min(1, t / dur); fn(k); if (k >= 1) { finish(); return false; } return true; });
+    setTimeout(finish, dur * 1000 + 1500);
+  });
+}
+function carry(to, o = {}) {
+  if (!R || !R.hog) return Promise.resolve();
+  return new Promise((res) => {
+    const timer = setTimeout(() => { if (R.carry && R.carry.res === done) { R.H.pos.copy(to); if (o.loc) R.H.loc = o.loc; R.carry = null; } res(); }, (o.dur || .9) * 1000 + 1500);
+    function done() { clearTimeout(timer); res(); }
+    R.carry = { from: R.hog.root.position.clone(), to: to.clone(), t: 0, dur: o.dur || .9, lift: o.lift ?? 1.6, pose: o.pose, yaw: o.yaw, loc: o.loc, hands: o.hands, res: done };
+  });
+}
+const heldPose = () => (S.trust < 45 ? 'ball' : 'stand');
+const cageSpot = () => freeSpot(hogScale(), V3(-.4, BED, .6));
+function burst({ n, geo, color, at, vel, life, gravity = -9.8, floorY = null, opacity = 1, delay = .3 }) {
+  if (!R) return;
+  const mat = std(color, { roughness: .5, transparent: opacity < 1 || true, opacity });
+  const g = new THREE.Group(); R.scene.add(g);
+  const ps = [];
+  for (let i = 0; i < n; i++) { const m = mesh(geo, mat, { p: at(i), cast: false }); m.userData.v = vel(i); m.userData.d = rand(0, delay * life); m.visible = false; g.add(m); ps.push(m); }
+  addFx((t, dt) => {
+    for (const m of ps) {
+      if (t < m.userData.d) continue;
+      m.visible = true;
+      const v = m.userData.v; v.y += gravity * dt; m.position.addScaledVector(v, dt);
+      if (floorY !== null && m.position.y < floorY) { m.position.y = floorY; v.set(0, 0, 0); }
+      m.rotation.x += dt * 4; m.rotation.z += dt * 3;
+    }
+    if (t > life * .65) mat.opacity = opacity * Math.max(0, 1 - (t - life * .65) / (life * .35));
+    if (t > life) { R.scene.remove(g); return false; }
+    return true;
+  });
+}
+
+// Props that only appear while you do something: measuring cup, jug, tweezers, scoop, scale, tub, carrier, clippers.
+const SCALE_P = V3(2.7, 0, 3.9), TUB_P = V3(-2.6, 0, 3.9), CARRIER_P = V3(.2, 0, 4.1);
+function prop(name) {
+  R.props = R.props || {};
+  if (R.props[name]) { R.props[name].visible = true; return R.props[name]; }
+  const g = new THREE.Group(); R.scene.add(g);
+  const white = std('#f2f0ea', { roughness: .4 }), metal = std('#b9bec3', { roughness: .25, metalness: .7 });
+  if (name === 'cup') {
+    g.add(mesh(new THREE.CylinderGeometry(.3, .24, .5, 24, 1, true), std('#f4f1ea', { roughness: .3, side: THREE.DoubleSide, transparent: true, opacity: .9 })));
+    g.add(mesh(new THREE.CircleGeometry(.24, 24), white, { p: V3(0, -.25, 0), r: [Math.PI / 2, 0, 0] }));
+    g.add(mesh(new THREE.BoxGeometry(.5, .06, .1), white, { p: V3(-.5, .1, 0) }));
+    for (let i = 0; i < 14; i++) g.add(mesh(new THREE.SphereGeometry(.05, 6, 5), std('#8b5a33'), { p: V3(rand(-.15, .15), -.18 + rand(0, .2), rand(-.15, .15)), s: V3(1, .7, 1) }));
+  } else if (name === 'jug') {
+    g.add(mesh(new THREE.CylinderGeometry(.32, .34, .8, 24), std('#cfe4ee', { roughness: .1, transparent: true, opacity: .55 })));
+    g.add(mesh(new THREE.CylinderGeometry(.28, .3, .55, 24), std('#7fb3d3', { roughness: .05, transparent: true, opacity: .6 }), { p: V3(0, -.1, 0) }));
+    g.add(mesh(new THREE.ConeGeometry(.1, .3, 12), std('#cfe4ee', { roughness: .1, transparent: true, opacity: .6 }), { p: V3(.36, .32, 0), r: [0, 0, -1.1] }));
+    g.add(mesh(new THREE.TorusGeometry(.2, .04, 8, 16, Math.PI), std('#cfe4ee', { roughness: .1, transparent: true, opacity: .7 }), { p: V3(-.34, .05, 0), r: [0, 0, Math.PI / 2] }));
+  } else if (name === 'stream') {
+    g.add(mesh(new THREE.CylinderGeometry(.035, .05, 1, 10, 1, true), std('#9ccbe6', { roughness: .02, transparent: true, opacity: .55 }), { cast: false }));
+  } else if (name === 'tweezers') {
+    for (const z of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(.04, 1.1, .05), metal, { p: V3(0, .55, z * .05), r: [z * .06, 0, 0] }));
+  } else if (name === 'scoop') {
+    g.add(mesh(new THREE.BoxGeometry(.5, .03, .32), std('#6fa58b', { roughness: .5 })));
+    g.add(rod(V3(-.25, 0, 0), V3(-1.1, .45, 0), .035, std('#6fa58b', { roughness: .5 })));
+  } else if (name === 'scale') {
+    g.add(mesh(new THREE.BoxGeometry(1.6, .2, 1.3), white, { p: V3(0, .1, 0), recv: true }));
+    g.add(mesh(new THREE.CylinderGeometry(.62, .62, .05, 36), metal, { p: V3(0, .23, -.08), recv: true }));
+    const c = document.createElement('canvas'); c.width = 256; c.height = 96;
+    const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
+    g.add(mesh(new THREE.PlaneGeometry(.7, .18), new THREE.MeshBasicMaterial({ map: tex }), { p: V3(0, .1, .66), cast: false }));
+    g.userData.lcd = (txt) => { const x = c.getContext('2d'); x.fillStyle = '#c9d8b6'; x.fillRect(0, 0, 256, 96); x.fillStyle = '#1e2a18'; x.font = 'bold 64px monospace'; x.textAlign = 'right'; x.fillText(txt, 236, 74); tex.needsUpdate = true; };
+    g.userData.lcd('0 g');
+    g.position.copy(SCALE_P);
+  } else if (name === 'tub') {
+    const prof = [[0, 0], [.75, 0], [.85, .04], [.95, .42], [.9, .45], [.8, .08], [0, .08]].map(([x, y]) => new THREE.Vector2(x, y));
+    g.add(mesh(new THREE.LatheGeometry(prof, 40), std('#e9eef0', { roughness: .3 }), { recv: true }));
+    g.add(mesh(new THREE.CylinderGeometry(.84, .8, .02, 36), std('#a9d2e6', { roughness: .03, transparent: true, opacity: .6 }), { p: V3(0, .2, 0), cast: false }));
+    g.position.copy(TUB_P);
+  } else if (name === 'carrier') {
+    const body = std('#8fa7b8', { roughness: .45 });
+    g.add(mesh(new THREE.BoxGeometry(2.1, .9, 1.4), body, { p: V3(0, .45, 0), recv: true }));
+    g.add(mesh(new THREE.BoxGeometry(2.1, .5, 1.4), std('#c9d5dc', { roughness: .4 }), { p: V3(0, 1.15, 0) }));
+    const grid = new THREE.Group(); grid.position.set(0, .8, .71); g.add(grid);
+    for (let i = -4; i <= 4; i++) grid.add(rod(V3(i * .14, -.3, 0), V3(i * .14, .3, 0), .015, metal));
+    g.add(rod(V3(-.5, 1.6, 0), V3(.5, 1.6, 0), .06, std('#5d6f7c')));
+    g.position.copy(CARRIER_P);
+  } else if (name === 'clipper') {
+    g.add(mesh(new THREE.BoxGeometry(.32, .05, .08), metal, { p: V3(.16, .03, 0) }));
+    const jaw = mesh(new THREE.BoxGeometry(.32, .05, .08), metal, { p: V3(.16, -.03, 0) }); g.add(jaw); g.userData.jaw = jaw;
+    g.add(mesh(new THREE.BoxGeometry(.5, .07, .12), std('#d6455f', { roughness: .5 }), { p: V3(-.25, 0, 0) }));
+  } else if (name === 'worm') {
+    for (let i = 0; i < 8; i++) g.add(mesh(new THREE.SphereGeometry(.042 - i * .002, 10, 8), std(i ? '#c99a52' : '#8a6234', { roughness: .45 }), { p: V3(i * .055, .04, 0) }));
+  }
+  R.props[name] = g;
+  return g;
+}
+function hideProp(name) { if (R && R.props && R.props[name]) R.props[name].visible = false; }
+
+// Runs a care action with its 3D effect while the controls are locked. Without 3D the change applies at once.
+async function perform(label, visual, apply) {
+  if (!R) { apply(); return; }
+  T.mode = 'fx'; T.fxLabel = label; render();
+  let applied = false;
+  const once = () => { if (!applied) { applied = true; apply(); render(); } };
+  try { await visual(once); } catch (e) { /* keep the app usable even if an effect fails */ }
+  once();
+  T.mode = null; T.stage = null; T.look = null; T.fxLabel = '';
+  render(); save();
+}
+
+async function fxFood(apply) {
+  T.look = { p: FOOD.clone(), until: Date.now() + 3200 };
+  const cup = prop('cup'); cup.position.set(FOOD.x - .45, 2.2, FOOD.z); cup.rotation.set(0, 0, 0); cup.scale.setScalar(.01);
+  await tween(.35, (k) => cup.scale.setScalar(Math.max(.01, easeIO(k))));
+  await tween(.45, (k) => { cup.rotation.z = -1.9 * easeIO(k); cup.position.y = 2.2 - .4 * k; });
+  burst({ n: 34, geo: new THREE.SphereGeometry(.05, 6, 5), color: '#8b5a33', life: 1.6, delay: .4, floorY: FOOD.y + .16,
+    at: () => V3(FOOD.x - .2 + rand(-.08, .08), 1.65, FOOD.z + rand(-.1, .1)), vel: () => V3(rand(.1, .6), rand(-.5, 0), rand(-.35, .35)) });
+  await wait(700); apply();
+  await tween(.4, (k) => { cup.rotation.z = -1.9 * (1 - easeIO(k)); });
+  await tween(.3, (k) => cup.scale.setScalar(Math.max(.01, 1 - k)));
+  hideProp('cup');
+}
+async function fxWater(apply) {
+  T.look = { p: WATER.clone(), until: Date.now() + 3400 };
+  const jug = prop('jug'); jug.position.set(WATER.x - .55, 2.3, WATER.z); jug.rotation.set(0, 0, 0); jug.scale.setScalar(.01);
+  await tween(.35, (k) => jug.scale.setScalar(Math.max(.01, easeIO(k))));
+  await tween(.45, (k) => { jug.rotation.z = -1.2 * easeIO(k); });
+  const st = prop('stream'); st.position.set(WATER.x - .05, 1.15, WATER.z); st.scale.set(1, 1.5, 1);
+  apply();
+  burst({ n: 18, geo: new THREE.SphereGeometry(.025, 6, 5), color: '#a8d4ec', opacity: .8, life: 1.2, delay: .6, gravity: -6,
+    at: () => V3(WATER.x + rand(-.1, .1), WATER.y + .3, WATER.z + rand(-.1, .1)), vel: () => V3(rand(-.6, .6), rand(.6, 1.4), rand(-.6, .6)) });
+  await tween(1.2, (k) => { st.scale.x = st.scale.z = 1 + Math.sin(k * 40) * .15; });
+  hideProp('stream');
+  await tween(.4, (k) => { jug.rotation.z = -1.2 * (1 - easeIO(k)); });
+  await tween(.3, (k) => jug.scale.setScalar(Math.max(.01, 1 - k)));
+  hideProp('jug');
+}
+async function fxWorm(apply) {
+  const H = R.H, s = hogScale();
+  const f = V3(Math.cos(H.yaw), 0, -Math.sin(H.yaw));
+  let p = V3(H.pos.x + f.x * 1.5 * s, BED, H.pos.z + f.z * 1.5 * s);
+  const q = p.clone(); pushOut(q, 0, .25, null, true); p = q;
+  T.look = { p: p.clone(), until: Date.now() + 2600 };
+  const tw = prop('tweezers'), worm = prop('worm');
+  tw.position.set(p.x, 2.4, p.z); worm.position.set(p.x - .2, 2.4, p.z); worm.rotation.set(0, rand(0, 6), 0);
+  await tween(.6, (k) => { tw.position.y = 2.4 - 1.95 * easeIO(k); worm.position.y = tw.position.y; });
+  await tween(.4, (k) => { worm.position.y = (BED + .45) * (1 - k) + BED * k; });
+  await tween(.4, (k) => { tw.position.y = BED + .45 + 2 * k; });
+  hideProp('tweezers');
+  T.worm = { p, left: 1 };
+  apply();
+}
+// called each frame while the hedgehog is at the worm
+function eatWorm(dt) {
+  const w = T.worm; if (!w || !R.props || !R.props.worm) return;
+  w.left -= dt / 2.6;
+  R.props.worm.scale.set(Math.max(.05, w.left), 1, 1);
+  if (w.left <= 0) { hideProp('worm'); R.props.worm.scale.set(1, 1, 1); T.worm = null; }
+}
+async function fxScoop(apply) {
+  const tool = prop('scoop');
+  const meshes = [...R.room.poops.children, ...R.room.wheelPoops.children];
+  const first = meshes.length ? meshes[0].getWorldPosition(V3()) : V3(1, BED, 0);
+  T.look = { p: first, until: Date.now() + 3000, dist: 7 };
+  tool.position.copy(first).add(V3(0, 1.4, 0));
+  for (const m of meshes.slice(0, 8)) {
+    const at = m.getWorldPosition(V3());
+    await tween(.25, (k) => tool.position.lerp(V3(at.x, at.y + .06, at.z), k));
+    const clone = m.clone(); clone.material = m.material.clone(); clone.material.transparent = true;
+    clone.position.copy(at); clone.quaternion.copy(m.getWorldQuaternion(new THREE.Quaternion())); clone.scale.copy(m.getWorldScale(V3()));
+    R.scene.add(clone); m.visible = false;
+    addFx((t) => { clone.position.y += .02; clone.material.opacity = Math.max(0, 1 - t / .6); if (t > .6) { R.scene.remove(clone); return false; } return true; });
+  }
+  await tween(.3, (k) => { tool.position.y += .05; });
+  apply();
+  hideProp('scoop');
+}
+async function fxBedding(apply) {
+  T.look = { p: V3(0, BED, 0), until: Date.now() + 3200, dist: 11 };
+  burst({ n: 70, geo: new THREE.PlaneGeometry(.12, .05), color: '#f7f1e3', life: 2.4, delay: .5, gravity: -3, floorY: BED + .02,
+    at: () => V3(rand(-4.2, 4.2), rand(2.6, 3.6), rand(-2.1, 2.1)), vel: () => V3(rand(-.3, .3), 0, rand(-.3, .3)) });
+  await wait(900); apply();
+  await wait(1400);
+}
+async function fxWeigh(g, apply) {
+  const sc = prop('scale'); sc.userData.lcd('0 g');
+  T.look = { p: SCALE_P.clone(), until: Date.now() + 6000, dist: 6.5 };
+  await carry(V3(SCALE_P.x, .25, SCALE_P.z - .08), { dur: 1.1, lift: 2, loc: 'stage' });
+  T.stage = { p: V3(SCALE_P.x, .25, SCALE_P.z - .08), pose: heldPose(), yaw: -.5 };
+  await tween(1.2, (k) => sc.userData.lcd(`${Math.round(g * (1 - Math.pow(1 - k, 3)) + (k < 1 ? rand(-3, 3) : 0))} g`));
+  sc.userData.lcd(`${g} g`);
+  await wait(900);
+  T.stage = null;
+  await carry(cageSpot(), { dur: 1.1, lift: 2, loc: 'cage' });
+  hideProp('scale');
+  apply();
+}
+async function fxNails(apply, partial) {
+  await carry(V3(HAND.x, HAND.y + .22, HAND.z), { dur: .9, hands: true, loc: 'stage' });
+  T.stage = { p: V3(HAND.x, HAND.y + .22, HAND.z), pose: partial ? 'ball' : 'stand', yaw: -.6, hands: true };
+  const cl = prop('clipper'); cl.position.set(HAND.x + .55, HAND.y + .35, HAND.z + .45); cl.rotation.set(0, .6, 0);
+  for (let i = 0; i < (partial ? 2 : 5); i++) {
+    await tween(.18, (k) => { cl.userData.jaw.position.y = -.03 + .03 * Math.sin(k * Math.PI); });
+    burst({ n: 3, geo: new THREE.BoxGeometry(.02, .01, .01), color: '#efe6d8', life: .8, delay: .1, floorY: HAND.y - .1,
+      at: () => cl.position.clone().add(V3(.3, 0, 0)), vel: () => V3(rand(-.4, .4), rand(.3, .8), rand(-.4, .4)) });
+    await wait(260);
+  }
+  hideProp('clipper');
+  apply();
+  T.stage = null;
+  await carry(cageSpot(), { dur: .9, hands: true, loc: 'cage' });
+}
+async function fxBath(apply) {
+  const tub = prop('tub');
+  T.look = { p: TUB_P.clone(), until: Date.now() + 6500, dist: 6.5 };
+  const inTub = V3(TUB_P.x, .1, TUB_P.z);
+  await carry(inTub, { dur: 1.1, lift: 2, loc: 'stage' });
+  T.stage = { p: inTub, pose: 'stand', yaw: .4 };
+  burst({ n: 40, geo: new THREE.SphereGeometry(.05, 10, 8), color: '#ffffff', opacity: .75, life: 3, delay: .7, gravity: .6,
+    at: () => V3(TUB_P.x + rand(-.6, .6), .25, TUB_P.z + rand(-.5, .5)), vel: () => V3(rand(-.1, .1), rand(.05, .3), rand(-.1, .1)) });
+  await wait(2600);
+  apply();
+  T.stage = null;
+  burst({ n: 16, geo: new THREE.SphereGeometry(.03, 6, 5), color: '#a8d4ec', opacity: .8, life: 1, delay: .2,
+    at: () => V3(TUB_P.x, .5, TUB_P.z), vel: () => V3(rand(-1, 1), rand(1, 2), rand(-1, 1)) });
+  await carry(cageSpot(), { dur: 1.1, lift: 2, loc: 'cage' });
+  hideProp('tub');
+}
+async function fxVet(apply) {
+  prop('carrier');
+  T.look = { p: CARRIER_P.clone(), until: Date.now() + 8000, dist: 7 };
+  await carry(V3(CARRIER_P.x, .1, CARRIER_P.z), { dur: 1.1, lift: 2.2, loc: 'stage' });
+  T.stage = { p: V3(CARRIER_P.x, .1, CARRIER_P.z), pose: 'ball', yaw: 0 };
+  const fade = $('fade');
+  fade.querySelector('span').textContent = '동물병원에 다녀오는 중…';
+  fade.classList.add('on');
+  await wait(1900);
+  apply();
+  fade.classList.remove('on');
+  await wait(700);
+  T.stage = null;
+  await carry(cageSpot(), { dur: 1.1, lift: 2.2, loc: 'cage' });
+  hideProp('carrier');
 }
 
 const VIEW_LABEL = () => (T.zoom ? '방 전체 보기' : '따라가며 보기');
@@ -975,7 +1355,7 @@ function render() {
   $('name').textContent = S.name;
   $('meta').textContent = `아프리카 피그미 고슴도치 · ${COATS[S.morph].label} · ${S.sex === 'f' ? '암컷' : '수컷'} · ${ageText(aw)}`;
   $('capTime').textContent = hhmm(now) + (isNight(now) ? ' · 밤' : ' · 낮');
-  $('capAct').textContent = T.mode === 'hand' ? '손 위에 올려 둔 중' : T.mode === 'out' ? '거실 산책 중' : ACT_TEXT[S.act] || '관찰 중';
+  $('capAct').textContent = T.mode === 'fx' ? T.fxLabel : T.mode === 'hand' ? '손 위에 올려 둔 중' : T.mode === 'out' ? '거실 산책 중' : ACT_TEXT[S.act] || '관찰 중';
 
   const setV = (id, v, unit, note, level) => {
     const el = $(id); el.className = 'vital' + (level ? ' ' + level : '');
@@ -1036,7 +1416,11 @@ const ACTS = [
   { id: 'vet',     t: '동물병원',    sub: () => (S.mites || S.torpor || S.health < 50 ? '진료가 필요해요' : '건강검진'), urgent: () => S.mites || S.health < 40, run: vet },
 ];
 $('acts').innerHTML = ACTS.map((a) => `<button class="act" id="a-${a.id}" type="button"><b>${a.t}</b><span></span></button>`).join('');
-ACTS.forEach((a) => $('a-' + a.id).addEventListener('click', () => { if (adopted && !T.mode) a.run(); }));
+ACTS.forEach((a) => $('a-' + a.id).addEventListener('click', (e) => {
+  if (!adopted || T.mode) return;
+  const b = e.currentTarget; b.classList.remove('fired'); void b.offsetWidth; b.classList.add('fired');
+  a.run();
+}));
 function renderActs() {
   ACTS.forEach((a) => {
     const b = $('a-' + a.id);
@@ -1063,113 +1447,138 @@ function done(msg) { toast(msg); render(); save(); }
 function fillFood() {
   const add = BOWL_FOOD - S.food;
   if (add < .5) return toast('사료 그릇이 이미 가득 차 있어요');
-  S.food = BOWL_FOOD;
-  log(S, Date.now(), `사료를 ${add.toFixed(0)}g 채워 줬어요`);
-  done('사료를 채웠어요');
+  perform('사료를 붓는 중', fxFood, () => {
+    S.food = BOWL_FOOD;
+    log(S, Date.now(), `사료를 ${add.toFixed(0)}g 채워 줬어요`);
+    toast('사료를 채웠어요');
+  });
 }
 function fillWater() {
-  S.water = BOWL_WATER;
-  log(S, Date.now(), '물그릇을 씻고 새 물로 갈아 줬어요');
-  done('물을 갈아 줬어요');
+  perform('물을 갈아 주는 중', fxWater, () => {
+    S.water = BOWL_WATER;
+    log(S, Date.now(), '물그릇을 씻고 새 물로 갈아 줬어요');
+    toast('물을 갈아 줬어요');
+  });
 }
 function giveWorm() {
   const now = Date.now();
   if (S.torpor) return toast('지금은 먹을 수 없어요. 먼저 몸을 따뜻하게 해 주세요');
   if (sleepingNow()) return toast('자고 있어요. 밀웜은 저녁에 깨어 있을 때 주세요');
-  if (S.treats.day !== dayKey(now)) S.treats = { day: dayKey(now), n: 0 };
-  S.treats.n++;
-  S.satiety = clamp(S.satiety + 4); S.trust = clamp(S.trust + 1.5);
-  if (S.treats.n > TREAT_LIMIT) {
-    S.weight += 2.5;
-    log(S, now, `밀웜을 먹었어요. 오늘 ${S.treats.n}마리째라 너무 많아요 (비만 위험)`, true);
-    return done('간식이 너무 많아요. 밀웜은 하루 2~3마리면 충분해요');
-  }
-  S.weight += .6;
-  log(S, now, '밀웜을 주니 킁킁 냄새를 맡고 바로 먹었어요');
-  done('밀웜을 먹었어요');
+  if (T.worm) return toast('아직 먹고 있어요');
+  if (S.act === 'wheel') { S.act = 'roam'; S.actUntil = now + 3 * MIN; }
+  perform('밀웜을 주는 중', fxWorm, () => {
+    if (S.treats.day !== dayKey(now)) S.treats = { day: dayKey(now), n: 0 };
+    S.treats.n++;
+    S.satiety = clamp(S.satiety + 4); S.trust = clamp(S.trust + 1.5);
+    if (S.treats.n > TREAT_LIMIT) {
+      S.weight += 2.5;
+      log(S, now, `밀웜을 먹었어요. 오늘 ${S.treats.n}마리째라 너무 많아요 (비만 위험)`, true);
+      return toast('간식이 너무 많아요. 밀웜은 하루 2~3마리면 충분해요');
+    }
+    S.weight += .6;
+    log(S, now, '핀셋으로 밀웜을 내려 주니 킁킁 냄새를 맡고 다가와 먹었어요');
+    toast('밀웜을 먹고 있어요');
+  });
 }
 function scoop() {
   if (!S.poops.length) return toast('치울 똥이 없어요');
   const n = S.poops.length;
-  S.dirt = clamp(S.dirt - n * 2.5);
-  S.poops = [];
-  log(S, Date.now(), `똥 ${n}개를 치우고 쳇바퀴를 닦았어요`);
-  done('똥을 치웠어요');
+  perform('똥을 치우는 중', fxScoop, () => {
+    S.dirt = clamp(S.dirt - n * 2.5);
+    S.poops = [];
+    log(S, Date.now(), `똥 ${n}개를 치우고 쳇바퀴를 닦았어요`);
+    toast('똥을 치웠어요');
+  });
 }
 function changeBedding() {
   const now = Date.now();
   disturb('베딩 교체');
-  S.dirt = 0; S.poops = []; S.shed = []; S.lastBedding = now;
-  log(S, now, '베딩을 전부 새것으로 갈고 케이지를 닦았어요');
-  if (isNight(now) && !S.torpor && Math.random() < .5) {
-    log(S, now + 1000, '새 베딩 냄새를 맡더니 침 거품을 만들어 가시에 바르는 안팅을 했어요');
-    T.antUntil = now + 6000;
-  }
-  done('베딩을 갈았어요');
+  perform('베딩을 가는 중', fxBedding, () => {
+    S.dirt = 0; S.poops = []; S.shed = []; S.lastBedding = now;
+    log(S, now, '베딩을 전부 새것으로 갈고 케이지를 닦았어요');
+    if (isNight(now) && !S.torpor && Math.random() < .5) {
+      log(S, now + 1000, '새 베딩 냄새를 맡더니 침 거품을 만들어 가시에 바르는 안팅을 했어요');
+      T.antUntil = now + 7000;
+    }
+    toast('베딩을 갈았어요');
+  });
 }
 function toggleHeater() {
   S.heater = !S.heater;
   log(S, Date.now(), S.heater ? '세라믹 히터를 켰어요' : '세라믹 히터를 껐어요');
-  done(S.heater ? `히터를 켰어요 · ${cageTemp(S, Date.now()).toFixed(1)}°C` : `히터를 껐어요 · ${cageTemp(S, Date.now()).toFixed(1)}°C`);
+  if (R) {
+    T.look = { p: V3(.4, 4.6, .2), until: Date.now() + 2600, dist: 8 };
+    if (S.heater) burst({ n: 24, geo: new THREE.SphereGeometry(.05, 8, 6), color: '#ffb070', opacity: .35, life: 2.6, delay: .8, gravity: -.4,
+      at: () => V3(.4 + rand(-.3, .3), 5.7, .2 + rand(-.3, .3)), vel: () => V3(rand(-.25, .25), rand(-.6, -.2), rand(-.25, .25)) });
+  }
+  done(S.heater ? `히터를 켰어요. 전구가 서서히 데워져요 · ${cageTemp(S, Date.now()).toFixed(1)}°C` : `히터를 껐어요 · ${cageTemp(S, Date.now()).toFixed(1)}°C`);
 }
 function weigh() {
   const now = Date.now();
   disturb('체중 측정');
+  if (S.torpor) return toast('체온이 낮을 때는 꺼내지 말고 먼저 따뜻하게 해 주세요');
   const g = Math.round(S.weight + rand(-1.5, 1.5));
-  S.weights.push({ t: now, g });
-  if (S.weights.length > 120) S.weights.shift();
-  const tw = targetWeight(ageWeeks(S, now));
-  const lo = Math.round(tw * .85), hi = Math.round(tw * 1.15);
-  const verdict = g < tw * .82 ? '많이 말랐어요. 사료가 부족하지 않은지 확인하세요.' : g < lo ? '조금 가벼워요.' : g > tw * 1.2 ? '과체중이에요. 간식을 줄이고 쳇바퀴를 잘 쓰는지 봐 주세요.' : g > hi ? '조금 무거워요.' : '적정 체중이에요.';
-  log(S, now, `주방 저울로 체중을 쟀어요: ${g}g`);
-  render(); save();
-  openSheet(`<h3>체중 측정</h3>
-    <div class="big-read">${g}<small>g</small></div>
-    <p>${ageText(ageWeeks(S, now))} 기준 적정 범위는 ${lo}~${hi}g이에요. ${verdict}</p>
-    ${weightChart()}
-    <div class="actions"><button class="btn" type="button" data-close>확인</button></div>`);
+  perform('저울에 올려 재는 중', (apply) => fxWeigh(g, apply), () => {
+    S.weights.push({ t: now, g });
+    if (S.weights.length > 120) S.weights.shift();
+    const tw = targetWeight(ageWeeks(S, now));
+    const lo = Math.round(tw * .85), hi = Math.round(tw * 1.15);
+    const verdict = g < tw * .82 ? '많이 말랐어요. 사료가 부족하지 않은지 확인하세요.' : g < lo ? '조금 가벼워요.' : g > tw * 1.2 ? '과체중이에요. 간식을 줄이고 쳇바퀴를 잘 쓰는지 봐 주세요.' : g > hi ? '조금 무거워요.' : '적정 체중이에요.';
+    log(S, now, `주방 저울로 체중을 쟀어요: ${g}g`);
+    openSheet(`<h3>체중 측정</h3>
+      <div class="big-read">${g}<small>g</small></div>
+      <p>${ageText(ageWeeks(S, now))} 기준 적정 범위는 ${lo}~${hi}g이에요. ${verdict}</p>
+      ${weightChart()}
+      <div class="actions"><button class="btn" type="button" data-close>확인</button></div>`);
+  });
 }
 function clipNails() {
   const now = Date.now();
-  disturb('손톱 깎기');
   if (S.torpor) return toast('지금은 몸을 따뜻하게 하는 게 먼저예요');
   if (S.nails < 30) return toast('손톱이 아직 짧아요. 2~4주에 한 번이면 충분해요');
-  if (S.trust < 35) {
-    S.nails = Math.max(12, S.nails - 30); S.trust = clamp(S.trust - 1);
-    log(S, now, '손톱을 깎으려 하자 몸을 말아 버려서 몇 개만 깎았어요');
-    return done('몸을 말아서 일부만 깎았어요. 신뢰가 쌓이면 쉬워져요');
-  }
-  S.nails = 8;
-  log(S, now, '발을 살짝 잡고 손톱을 모두 깎았어요');
-  done('손톱을 깎았어요');
+  disturb('손톱 깎기');
+  const partial = S.trust < 35;
+  perform('손톱을 깎는 중', (apply) => fxNails(apply, partial), () => {
+    if (partial) {
+      S.nails = Math.max(12, S.nails - 30); S.trust = clamp(S.trust - 1);
+      log(S, now, '손톱을 깎으려 하자 몸을 말아 버려서 몇 개만 깎았어요');
+      return toast('몸을 말아서 일부만 깎았어요. 신뢰가 쌓이면 쉬워져요');
+    }
+    S.nails = 8;
+    log(S, now, '손바닥에 올려 발을 살짝 잡고 손톱을 모두 깎았어요');
+    toast('손톱을 깎았어요');
+  });
 }
 function bath() {
   const now = Date.now();
-  disturb('목욕');
   if (S.torpor) return toast('체온이 낮을 때 목욕시키면 위험해요');
+  disturb('목욕');
   const recent = now - S.lastBath < 4 * DAY;
-  S.lastBath = now; S.feetDirty = false;
-  S.trust = clamp(S.trust - (S.trust < 40 ? 2 : .5));
-  if (recent) { S.health = clamp(S.health - 4); log(S, now, '미지근한 물로 목욕을 시켰어요. 너무 자주 씻어서 피부가 건조해 보여요', true); return done('목욕은 발이 더러울 때만 가끔 해 주세요'); }
-  log(S, now, '미지근한 물에 발 목욕을 시키고 수건으로 잘 말려 줬어요');
-  done('목욕을 시켰어요');
+  perform('목욕시키는 중', fxBath, () => {
+    S.lastBath = now; S.feetDirty = false;
+    S.trust = clamp(S.trust - (S.trust < 40 ? 2 : .5));
+    if (recent) { S.health = clamp(S.health - 4); log(S, now, '미지근한 물로 목욕을 시켰어요. 너무 자주 씻어서 피부가 건조해 보여요', true); return toast('목욕은 발이 더러울 때만 가끔 해 주세요'); }
+    log(S, now, '미지근한 물에 발 목욕을 시키고 수건으로 잘 말려 줬어요');
+    toast('목욕을 시켰어요');
+  });
 }
 function vet() {
-  const now = Date.now();
-  const notes = [];
-  if (S.mites) { S.mites = false; notes.push('진드기 진단을 받고 구충 치료를 했어요. 베딩을 자주 갈아 주세요.'); }
-  if (S.torpor) { S.torpor = false; S.cold = 0; S.heater = true; S.act = 'rest'; S.actUntil = now + 30 * MIN; notes.push('저체온으로 동면을 시도하고 있었어요. 따뜻하게 보온하고 회복했어요. 히터를 켜 두었어요.'); }
-  const tw = targetWeight(ageWeeks(S, now));
-  if (S.weight > tw * 1.2) notes.push('과체중이에요. 간식을 줄이고 운동량을 늘려 주세요.');
-  if (S.weight < tw * .82) notes.push('저체중이에요. 사료를 충분히 주세요.');
-  if (S.nails > 75) { S.nails = 10; notes.push('길어진 손톱을 깎아 주었어요.'); }
-  if (!notes.length) notes.push('특별한 이상이 없어요. 지금처럼 돌봐 주세요.');
-  S.health = clamp(S.health + 15); S.trust = clamp(S.trust - 3);
-  S.weights.push({ t: now, g: Math.round(S.weight) });
-  log(S, now, `동물병원 진료: ${notes[0]}`);
-  render(); save();
-  openSheet(`<h3>동물병원 진료 결과</h3><p>체중 ${Math.round(S.weight)}g · 체온 ${S.torpor ? '낮음' : '정상'}</p><ul>${notes.map((n) => `<li>${n}</li>`).join('')}</ul>
-    <p>이동 스트레스로 조금 예민해졌어요.</p><div class="actions"><button class="btn" type="button" data-close>확인</button></div>`);
+  perform('동물병원에 가는 중', fxVet, () => {
+    const now = Date.now();
+    const notes = [];
+    if (S.mites) { S.mites = false; notes.push('진드기 진단을 받고 구충 치료를 했어요. 베딩을 자주 갈아 주세요.'); }
+    if (S.torpor) { S.torpor = false; S.cold = 0; S.heater = true; S.act = 'rest'; S.actUntil = now + 30 * MIN; notes.push('저체온으로 동면을 시도하고 있었어요. 따뜻하게 보온하고 회복했어요. 히터를 켜 두었어요.'); }
+    const tw = targetWeight(ageWeeks(S, now));
+    if (S.weight > tw * 1.2) notes.push('과체중이에요. 간식을 줄이고 운동량을 늘려 주세요.');
+    if (S.weight < tw * .82) notes.push('저체중이에요. 사료를 충분히 주세요.');
+    if (S.nails > 75) { S.nails = 10; notes.push('길어진 손톱을 깎아 주었어요.'); }
+    if (!notes.length) notes.push('특별한 이상이 없어요. 지금처럼 돌봐 주세요.');
+    S.health = clamp(S.health + 15); S.trust = clamp(S.trust - 3);
+    S.weights.push({ t: now, g: Math.round(S.weight) });
+    log(S, now, `동물병원 진료: ${notes[0]}`);
+    openSheet(`<h3>동물병원 진료 결과</h3><p>체중 ${Math.round(S.weight)}g · 체온 정상</p><ul>${notes.map((n) => `<li>${n}</li>`).join('')}</ul>
+      <p>이동 스트레스로 조금 예민해졌어요.</p><div class="actions"><button class="btn" type="button" data-close>확인</button></div>`);
+  });
 }
 
 /* ================= holding the hedgehog ================= */
@@ -1199,6 +1608,7 @@ function startHandling() {
   $('hWorm').addEventListener('click', handWorm);
   $('hDown').addEventListener('click', endHandling);
   T.handTimer = setInterval(handTick, 400);
+  carry(V3(HAND.x, HAND.y + .22, HAND.z), { dur: .9, hands: true, loc: 'hand', pose: 'ball' });
   handDraw();
   render();
 }
@@ -1270,6 +1680,7 @@ function endHandling() {
   if (calm && secs >= 20) { S.trust = clamp(S.trust + 2); h.gained += 2; }
   T.hand = null; T.mode = null;
   $('overlay').innerHTML = '';
+  carry(cageSpot(), { dur: .9, hands: true, loc: 'cage' });
   if (!S.torpor) { S.act = isNight(now) ? 'roam' : 'sleep'; S.actUntil = now + (isNight(now) ? 5 : 30) * MIN; S.sess = null; }
   log(S, now, `${secs}초 동안 손에 올려 교감했어요${h.treat ? ' (밀웜 1마리)' : ''}. ${calm ? '편안한 상태로 내려놓았어요' : '아직 경계하는 상태로 내려놓았어요'}`);
   done(h.gained >= 1 ? '신뢰가 조금 쌓였어요' : '매일 저녁 조금씩 만져 주면 신뢰가 쌓여요');
@@ -1282,7 +1693,8 @@ function startOuting() {
   disturb('거실 산책');
   endSession(S, now);
   T.mode = 'out';
-  T.out = { start: now, x: -1, z: 3.6, next: now + 2500, until: now + 45000 };
+  T.out = { start: now, x: -1, z: 3.6, next: now + 3500, until: now + 45000 };
+  carry(V3(-1, 0, 3.6), { dur: 1.1, lift: 2, loc: 'out' });
   log(S, now, '케이지 밖 거실 바닥에 내려놓았어요. 옆에서 지켜보는 중이에요');
   $('overlay').innerHTML = `<div style="position:absolute;right:10px;bottom:10px"><button class="btn" type="button" id="outEnd">케이지로 돌려보내기</button></div>`;
   $('outEnd').addEventListener('click', endOuting);
@@ -1301,6 +1713,7 @@ function endOuting() {
   const now = Date.now(), secs = Math.round((now - o.start) / 1000);
   T.mode = null; T.out = null;
   $('overlay').innerHTML = '';
+  carry(cageSpot(), { dur: 1.1, lift: 2, loc: 'cage' });
   const mins = Math.max(3, Math.round(secs / 4.5));
   S.trust = clamp(S.trust + (secs > 25 ? 2 : 1)); S.satiety = clamp(S.satiety - 2); S.weight -= .3;
   if (Math.random() < .25) addPoop(S, 'bed');
