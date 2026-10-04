@@ -178,6 +178,15 @@ button { font: inherit; color: inherit; }
 .opt[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .chart { width: 100%; height: auto; display: block; }
 .chart text { fill: var(--muted); font-size: 10px; font-family: var(--font-body); }
+.picks { display: flex; flex-direction: column; gap: 8px; }
+.pick { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); background: var(--bg); border-radius: 14px; padding: 10px 12px; cursor: pointer; text-align: left; min-width: 0; }
+.pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pick.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pick .sw { flex: none; }
+.pick .pt { display: flex; flex-direction: column; min-width: 0; }
+.pick .pt b { font-family: var(--font-head); font-size: 17px; }
+.pick .pt span { font-size: 12px; color: var(--muted); }
+.pick .pt span.need { color: var(--warn); }
 .big-read { font-size: 40px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
 .big-read small { font-size: 18px; color: var(--muted); font-weight: 500; }
 
@@ -286,7 +295,7 @@ const swatch = (c) => `<span class="sw" style="background: radial-gradient(circl
 function newState(name, sex, morph) {
   const now = Date.now();
   return {
-    v: 1, name, sex, morph, adopted: now, last: now,
+    v: 1, id: 'h' + now.toString(36) + Math.floor(Math.random() * 1e6).toString(36), name, sex, morph, adopted: now, last: now,
     weight: rand(140, 158), satiety: 70, hydration: 72,
     food: 20, water: 120, dirt: 6, nails: 18, trust: 15, health: 92,
     heater: true, cold: 0, torpor: false, mites: false, feetDirty: false,
@@ -301,7 +310,21 @@ function newState(name, sex, morph) {
 let S = null, adopted = false;
 const T = { mode: null, hand: null, out: null, antUntil: 0, zoom: false };
 
-function save() { if (!adopted) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable */ } }
+// Each hedgehog is saved under its own key; a small list remembers which ones exist and which was opened last.
+const SLOTS_KEY = 'hedgehog-home-slots', MAX_HOGS = 6;
+const hogKey = (id) => SAVE_KEY + ':' + id;
+let SLOTS = { active: null, ids: [] };
+function readSlots() { try { const v = JSON.parse(localStorage.getItem(SLOTS_KEY) || 'null'); return v && Array.isArray(v.ids) ? v : null; } catch (e) { return null; } }
+function writeSlots() { try { localStorage.setItem(SLOTS_KEY, JSON.stringify(SLOTS)); } catch (e) { /* storage unavailable */ } }
+// fields added in later updates get their defaults, everything already saved is kept
+function upgrade(saved) {
+  const base = newState(saved.name, saved.sex, saved.morph);
+  const h = Object.assign(base, saved, { tot: Object.assign(base.tot, saved.tot), night: Object.assign(base.night, saved.night), flags: Object.assign({}, saved.flags) });
+  if (!saved.id) h.id = base.id;
+  return h;
+}
+function readHog(id) { try { const r = localStorage.getItem(hogKey(id)); const v = r ? JSON.parse(r) : null; return v && v.v === 1 && v.morph ? upgrade(v) : null; } catch (e) { return null; } }
+function save() { if (!adopted || !S) return; try { localStorage.setItem(hogKey(S.id), JSON.stringify(S)); } catch (e) { /* storage unavailable */ } }
 function load() { try { const r = localStorage.getItem(SAVE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
 
 function log(s, t, m, bad) {
@@ -1777,13 +1800,15 @@ function openMenu() {
     ${weightChart()}
     <div class="sec">관찰 일지 전체</div>
     <ul class="log">${S.log.slice(0, 40).map((e) => `<li class="${e.bad ? 'bad' : ''}"><time>${new Date(e.t).getMonth() + 1}/${new Date(e.t).getDate()} ${hhmm(e.t)}</time><span>${esc(e.m)}</span></li>`).join('')}</ul>
-    <div class="actions"><button class="btn ghost" type="button" id="guideBtn">사육 가이드</button><button class="btn ghost" type="button" id="resetBtn">처음부터 다시</button><button class="btn" type="button" data-close>닫기</button></div>`);
+    <div class="actions"><button class="btn ghost" type="button" id="guideBtn">사육 가이드</button><button class="btn ghost" type="button" id="resetBtn">이 고슴도치 기록 지우기</button><button class="btn" type="button" id="switchBtn">고슴도치 바꾸기</button></div>`);
+  $('switchBtn').addEventListener('click', showPicker);
   $('guideBtn').addEventListener('click', openGuide);
   $('resetBtn').addEventListener('click', () => {
     const b = $('resetBtn');
-    if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = '기록을 모두 지우고 다시 시작'; b.className = 'btn danger'; return; }
-    try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ }
-    closeSheet(); showAdoption();
+    if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = `${S.name}의 기록을 정말 지울게요`; b.className = 'btn danger'; return; }
+    try { localStorage.removeItem(hogKey(S.id)); } catch (e) { /* ignore */ }
+    SLOTS.ids = SLOTS.ids.filter((x) => x !== S.id); if (SLOTS.active === S.id) SLOTS.active = SLOTS.ids[0] || null; writeSlots();
+    adopted = false; closeSheet(); showPicker();
   });
 }
 function openGuide() {
@@ -1817,9 +1842,51 @@ function showReturn(before, awayMs) {
 }
 
 /* ================= adoption ================= */
+const lastSeen = (t) => { const d = Date.now() - t; return d < 2 * MIN ? '방금 봤어요' : d < HOUR ? `${Math.floor(d / MIN)}분 전에 봤어요` : d < DAY ? `${Math.floor(d / HOUR)}시간 전에 봤어요` : `${Math.floor(d / DAY)}일 전에 봤어요`; };
+// Clear per-hedgehog scene state so a different hedgehog starts in its own spot.
+function resetScene() {
+  T.worm = null; T.stage = null; T.antUntil = 0; T.look = null;
+  if (!R) return;
+  hideProp('worm');
+  R.carry = null; R.waterK = undefined; R.heatK = undefined; propKey = '';
+  R.H = { pos: S.act === 'sleep' ? IGLOO_IN.clone() : freeSpot(hogScale()), yaw: -Math.PI / 2, inWheel: false, loc: 'cage', goal: null, wait: 0, stuck: 0, detour: null };
+}
+// Shown every time the app opens: pick which hedgehog to look after, or bring home a new one.
+function showPicker() {
+  const list = SLOTS.ids.map(readHog).filter(Boolean);
+  if (!list.length) return showAdoption();
+  if (!adopted) { S = list.find((h) => h.id === SLOTS.active) || list[0]; resetScene(); render(); }
+  const now = Date.now();
+  const cards = list.map((h) => {
+    const c = COATS[h.morph] || COATS.sp, need = h.torpor || h.mites || h.health < 40 || h.food < 1 || h.water < 10;
+    return `<button class="pick${adopted && h.id === S.id ? ' on' : ''}" type="button" data-id="${h.id}">${swatch(c)}
+      <span class="pt"><b>${esc(h.name)}</b><span>${c.label} · ${h.sex === 'f' ? '암컷' : '수컷'} · ${ageText(ageWeeks(h, now))}</span>
+      <span class="${need ? 'need' : ''}">${lastSeen(h.last)}${need ? ' · 돌봄이 필요할 수 있어요' : ''}</span></span></button>`;
+  }).join('');
+  openSheet(`<h3>어떤 고슴도치를 돌볼까요?</h3>
+    <p>고슴도치마다 기록이 따로 저장돼요. 고르면 그동안 지난 시간이 반영돼요.</p>
+    <div class="picks">${cards}</div>
+    <div class="actions">${list.length < MAX_HOGS ? '<button class="btn ghost" type="button" id="pickNew">새 고슴도치 데려오기</button>' : ''}${adopted ? '<button class="btn" type="button" data-close>닫기</button>' : ''}</div>`);
+  sheet.querySelectorAll('[data-id]').forEach((b) => b.addEventListener('click', () => selectHog(b.dataset.id)));
+  if ($('pickNew')) $('pickNew').addEventListener('click', () => { save(); adopted = false; showAdoption(); });
+}
+function selectHog(id) {
+  if (adopted && S && S.id === id) { closeSheet(); return; }
+  save();
+  const h = readHog(id); if (!h) return;
+  S = h; adopted = true;
+  SLOTS.active = id; writeSlots();
+  const now = Date.now(), before = { tot: Object.assign({}, S.tot), last: S.last }, away = now - S.last;
+  catchUp(S, now);
+  resetScene();
+  closeSheet(); render(); save();
+  if (away > 30 * MIN) showReturn(before, away); else toast(`${S.name}의 방이에요`);
+}
+
 function showAdoption() {
   adopted = false;
   S = newState('도치', 'm', 'sp');
+  resetScene();
   const choice = { sex: 'm', morph: 'sp' };
   render();
   const morphs = Object.entries(COATS).map(([k, c]) => `<button class="opt" type="button" data-morph="${k}" aria-pressed="${k === 'sp'}">${swatch(c)}${c.label}</button>`).join('');
@@ -1831,7 +1898,8 @@ function showAdoption() {
     <div class="opts">${morphs}</div>
     <div class="sec">성별</div>
     <div class="opts two"><button class="opt" type="button" data-sex="m" aria-pressed="true">수컷</button><button class="opt" type="button" data-sex="f" aria-pressed="false">암컷</button></div>
-    <div class="actions"><button class="btn" type="button" id="adGo">집에 데려오기</button></div>`);
+    <div class="actions">${SLOTS.ids.length ? '<button class="btn ghost" type="button" id="adBack">돌아가기</button>' : ''}<button class="btn" type="button" id="adGo">집에 데려오기</button></div>`);
+  if ($('adBack')) $('adBack').addEventListener('click', showPicker);
   sheet.querySelectorAll('[data-morph]').forEach((b) => b.addEventListener('click', () => {
     choice.morph = b.dataset.morph;
     sheet.querySelectorAll('[data-morph]').forEach((x) => x.setAttribute('aria-pressed', x === b));
@@ -1848,6 +1916,8 @@ function showAdoption() {
     S.act = isNight(now) ? 'roam' : 'sleep'; S.actUntil = now + 20 * MIN;
     log(S, now, `${name}을(를) 집에 데려왔어요. 낯선 곳이라 아직 많이 경계해요`);
     adopted = true;
+    SLOTS.ids.push(S.id); SLOTS.active = S.id; writeSlots();
+    resetScene();
     closeSheet(); render(); save();
     toast(isNight(now) ? '밤이라 깨어 있어요. 오늘은 조용히 지켜봐 주세요' : '낮이라 은신처에서 자고 있어요. 저녁에 깨어나요');
   });
@@ -1892,23 +1962,30 @@ function importOldGame() {
   return s;
 }
 
+// Put hedgehogs saved by earlier versions into the list the first time this version runs.
+function initSlots() {
+  const sl = readSlots();
+  if (sl) { SLOTS = sl; return; }
+  SLOTS = { active: null, ids: [] };
+  let first = load(), imported = false;
+  if (!first) { first = importOldGame(); imported = !!first; }
+  if (first && first.v === 1 && first.morph) {
+    const h = upgrade(first);
+    try { localStorage.setItem(hogKey(h.id), JSON.stringify(h)); SLOTS.ids.push(h.id); SLOTS.active = h.id; } catch (e) { /* storage unavailable */ }
+    if (imported) setTimeout(() => toast(`이전에 키우던 ${h.name}을(를) 목록에 데려왔어요`), 600);
+  }
+  writeSlots();
+}
+
 function start(data) {
   try { if (!window.THREE) throw new Error('three.js not loaded'); init3D(); } catch (e) { console.error('3D unavailable:', e); R = null; $('nogl').hidden = false; $('zoomBtn').hidden = true; }
-  let saved = data && data.S ? data.S : load();
-  let imported = false;
-  if (!saved) { saved = importOldGame(); imported = !!saved; }
-  if (saved && saved.v === 1 && saved.morph) {
-    // fields added in later updates get their defaults, everything already saved is kept
-    const base = newState(saved.name, saved.sex, saved.morph);
-    S = Object.assign(base, saved, { tot: Object.assign(base.tot, saved.tot), night: Object.assign(base.night, saved.night), flags: Object.assign({}, saved.flags) });
-    adopted = true;
-    const before = { tot: Object.assign({}, S.tot), last: S.last };
-    const away = Date.now() - S.last;
-    catchUp(S, Date.now());
-    render(); save();
-    if (imported) toast(`이전에 키우던 ${S.name}을(를) 이어서 키워요`);
-    else if (!(data && data.S) && away > 30 * MIN) showReturn(before, away);
-  } else showAdoption();
+  initSlots();
+  if (data && data.S) {
+    // a live update of the page: keep looking after the same hedgehog without asking again
+    S = upgrade(data.S); adopted = true;
+    if (!SLOTS.ids.includes(S.id)) { SLOTS.ids.push(S.id); writeSlots(); }
+    catchUp(S, Date.now()); resetScene(); render(); save();
+  } else showPicker();
   setInterval(tick, 1000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); else tick(); });
   window.addEventListener('pagehide', save);
