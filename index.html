@@ -119,13 +119,22 @@ button { font: inherit; color: inherit; }
 .hut svg { width: 100%; height: 100%; display: block; }
 
 .hog {
-  position: absolute; bottom: 9%; left: 50%; width: 40%; aspect-ratio: 1;
+  position: absolute; bottom: 8%; left: 50%; width: 46%; aspect-ratio: 1.2;
   transform: translateX(-50%); transition: left 2.6s ease-in-out;
   cursor: pointer; z-index: 3; touch-action: manipulation;
 }
 .hog-inner { width: 100%; height: 100%; transform-origin: 50% 100%; transition: transform .6s; }
 .hog svg, .catcher svg { width: 100%; height: 100%; display: block; overflow: visible; }
-.bob { transform-origin: 100px 190px; animation: bob 2.4s infinite ease-in-out; }
+.bob { transform-origin: 120px 184px; animation: bob 2.4s infinite ease-in-out; }
+.hog svg, .catcher svg { transition: transform .25s; }
+.hog.left svg, .catcher.left svg { transform: scaleX(-1); }
+.sniff { transform-box: fill-box; transform-origin: left center; animation: sniff 1.6s infinite; }
+@keyframes sniff { 0%, 60%, 100% { transform: none; } 70% { transform: translate(1.5px, -1px) scale(1.08); } 80% { transform: none; } 90% { transform: translate(1.5px, -1px) scale(1.08); } }
+.hog.walking .legs rect, .catcher.moving .legs rect { animation: step .3s infinite alternate ease-in-out; }
+.hog.walking .legs-near rect:nth-child(2), .hog.walking .legs rect:nth-child(1) { animation-direction: alternate-reverse; }
+@keyframes step { from { transform: translateX(-3px); } to { transform: translateX(3px); } }
+.hog[data-mood="ant"] .head { animation: ant .5s infinite alternate ease-in-out; }
+@keyframes ant { to { translate: -4px -3px; } }
 .hog.walking .bob { animation: waddle .45s infinite ease-in-out; }
 .hog.hop .bob { animation: hop .5s 2 ease-out; }
 .hog[data-mood="sleep"] .bob { animation: breathe 3.6s infinite ease-in-out; }
@@ -196,7 +205,7 @@ button { font: inherit; color: inherit; }
 @keyframes wormout { to { transform: scale(1.6); opacity: 0; } }
 .shake { animation: shake .3s; }
 @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
-.catcher { position: absolute; bottom: 4%; width: 22%; aspect-ratio: 1; transform: translateX(-50%); pointer-events: none; }
+.catcher { position: absolute; bottom: 4%; width: 26%; aspect-ratio: 1.2; transform: translateX(-50%); pointer-events: none; }
 .faller { position: absolute; font-size: 30px; line-height: 1; transform: translate(-50%, -50%); pointer-events: none; }
 .mem-grid { position: absolute; inset: 44px 12px 12px; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(3, 1fr); gap: 8px; }
 .mem {
@@ -438,12 +447,11 @@ const GEAR = {
   crown:   { name: '도토리 왕관',     g: '👑', price: 90 },
 };
 const FORMS = {
-  athlete:  { name: '번개 도치',   desc: '놀이를 제일 많이 해서 날쌘돌이가 됐어요. 밀웜 사냥 시간이 3초 늘어나요.', dark: '#3d4a5c', mid: '#56677d', tip: '#f2c94c' },
-  foodie:   { name: '먹보 도치',   desc: '밥을 제일 많이 먹어서 통통해졌어요. 배부름이 천천히 줄어요.',            dark: '#7a4a2a', mid: '#a0643c', tip: '#e9b98a' },
-  explorer: { name: '탐험가 도치', desc: '탐험을 제일 많이 다녀서 모험가가 됐어요. 탐험 시간이 20% 짧아져요.',     dark: '#4f5a3a', mid: '#6c7a4c', tip: '#d6cf96' },
-  sweet:    { name: '솜사탕 도치', desc: '쓰다듬기와 목욕을 제일 많이 받아서 하얗고 보송해졌어요. 기분이 천천히 줄어요.', dark: '#e3c4cf', mid: '#f1dbe2', tip: '#ffffff' },
+  athlete:  { name: '번개 도치',   desc: '놀이를 제일 많이 해서 까만 차콜 가시의 날쌘돌이가 됐어요. 밀웜 사냥 시간이 3초 늘어나요.' },
+  foodie:   { name: '먹보 도치',   desc: '밥을 제일 많이 먹어서 시나몬색 가시에 통통해졌어요. 배부름이 천천히 줄어요.' },
+  explorer: { name: '탐험가 도치', desc: '탐험을 제일 많이 다녀서 진한 초콜릿색 가시의 모험가가 됐어요. 탐험 시간이 20% 짧아져요.' },
+  sweet:    { name: '솜사탕 도치', desc: '쓰다듬기와 목욕을 제일 많이 받아서 하얀 가시에 빨간 눈을 가진 알비노 고슴도치가 됐어요. 기분이 천천히 줄어요.' },
 };
-const BASE_COLORS = { dark: '#6b4a33', mid: '#8d6446', tip: '#c9a27c' };
 
 // Expedition spots and the treasures (dex entries) each can turn up. r: 0 common, 1 rare, 2 legendary.
 const PLACES = [
@@ -500,7 +508,11 @@ const TIPS = [
   '고슴도치는 우유를 소화하지 못해요. 그래서 상점에 우유는 없어요.',
   '밀웜 사냥에서 1초 안에 연속으로 잡으면 콤보! 5콤보마다 점수가 2배, 3배가 돼요.',
   '오늘의 미션 3개를 다 깨면 보너스 열매를 받아요. 미션은 매일 바뀌어요.',
-  '고슴도치는 처음 맡는 냄새가 나면 침을 거품처럼 만들어 가시에 바르는 "안팅"을 해요.',
+  '고슴도치는 처음 맡는 냄새가 나면 침을 거품처럼 만들어 가시에 바르는 "안팅"을 해요. 도치도 가끔 해요!',
+  '아기 고슴도치는 하얗고 짧은 가시를 갖고 태어나요. 자라면서 갈색 줄무늬 가시로 바뀌어요.',
+  '고슴도치는 눈이 나쁜 대신 코가 아주 좋아요. 그래서 늘 코를 킁킁거려요.',
+  '알비노 고슴도치는 가시가 하얗고 눈이 빨개요. 솜사탕 도치가 바로 알비노예요.',
+  '고슴도치는 잘 때도 공처럼 몸을 동그랗게 말고 자요.',
   '앱을 꺼 두어도 시간은 흘러요. 매일 출석하면 보상이 점점 커져요.',
 ];
 
@@ -561,7 +573,7 @@ function migrate(s) {
 
 let S = null;              // saved game state
 let adopted = false;       // false while the naming card is shown
-const T = { curlUntil: 0, eatUntil: 0, pokes: [], speakUntil: 0, nextChat: 0, game: null, lastKey: '', cardOpen: false };
+const T = { antUntil: 0, curlUntil: 0, eatUntil: 0, pokes: [], speakUntil: 0, nextChat: 0, game: null, lastKey: '', cardOpen: false };
 
 function save() {
   if (!adopted) return;
@@ -643,116 +655,156 @@ function catchUp(s, until) {
 }
 
 /* ================= hedgehog drawing ================= */
-function spikeRing(cx, cy, rx, ry, n, len, a0, a1) {
+// Side-view hedgehog facing right in a 240x200 box. Quills are generated from a seeded
+// random stream so the coat looks the same on every redraw.
+function seeded(seed) {
+  return () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+// Real hedgehog colour morphs. Hoglets start with short pale quills that darken as they grow.
+const COATS = {
+  hoglet:   { dark: '#9c8570', mid: '#d9cbb8', band: '#a88f78', tip: '#fbf6ee', face: '#e6d3ba', belly: '#e9dccb', skin: '#e2aa9c', eye: '#1a1210' },
+  base:     { dark: '#3b2b20', mid: '#8a6a4f', band: '#3f2d21', tip: '#efe4d0', face: '#d6bd9b', belly: '#c9ad88', skin: '#c79483', eye: '#1a1210' },
+  athlete:  { dark: '#25262b', mid: '#62646c', band: '#2a2b30', tip: '#f2ead6', face: '#d3c4ae', belly: '#c4b6a2', skin: '#b98d80', eye: '#1a1210' },
+  foodie:   { dark: '#6e4325', mid: '#b98352', band: '#7a4a2a', tip: '#f8e6c8', face: '#e6c9a4', belly: '#dcbc93', skin: '#d39c86', eye: '#1a1210' },
+  explorer: { dark: '#2e2118', mid: '#6a4b33', band: '#33241a', tip: '#e9dac0', face: '#cfb08a', belly: '#bf9f78', skin: '#bb8a78', eye: '#1a1210' },
+  sweet:    { dark: '#d9cbc0', mid: '#f4ece6', band: '#e2d4ca', tip: '#ffffff', face: '#f6e7dd', belly: '#f3e6dc', skin: '#efb3aa', eye: '#c2364f' },
+};
+const QUILLS = [ // per growth stage: count and length
+  { n: 140, len: [10, 14], w: 2.0 },
+  { n: 135, len: [14, 19], w: 2.2 },
+  { n: 175, len: [17, 24], w: 2.4 },
+];
+
+function quill(x, y, ang, len, w, c) {
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  const at = (f) => `${(x + dx * len * f).toFixed(1)} ${(y + dy * len * f).toFixed(1)}`;
+  return `<path d="M${at(0)}L${at(1)}" stroke="${c.mid}" stroke-width="${w}"/>` +
+         `<path d="M${at(.4)}L${at(.72)}" stroke="${c.band}" stroke-width="${w}"/>` +
+         `<path d="M${at(.84)}L${at(1)}" stroke="${c.tip}" stroke-width="${w * .85}"/>`;
+}
+
+// Quill coat over the back dome. Each quill leans back toward the tail like a real coat.
+function coat(stage, c) {
+  const q = QUILLS[stage], rnd = seeded(7 + stage);
   const pts = [];
-  const total = n * 2;
-  for (let i = 0; i <= total; i++) {
-    const a = (a0 + (a1 - a0) * (i / total)) * Math.PI / 180;
-    const r = i % 2 ? 1 + len : 1;
-    pts.push((cx + Math.cos(a) * rx * r).toFixed(1) + ',' + (cy + Math.sin(a) * ry * r).toFixed(1));
+  while (pts.length < q.n) {
+    const x = 30 + rnd() * 140, y = 62 + rnd() * 108;
+    const nx = (x - 106) / 80, ny = (y - 128) / 62;
+    if (nx * nx + ny * ny > 1 || y > 166) continue;
+    if (x > 150 && y > 96 + (x - 150) * .2) continue; // keep the face clear
+    pts.push([x, y, nx * nx + ny * ny]);
   }
-  return pts.join(' ');
+  pts.sort((a, b) => a[2] - b[2]);
+  return pts.map(([x, y]) => {
+    const ang = Math.atan2(y - 176, x - 128) - .55 + (rnd() - .5) * .35;
+    return quill(x, y, ang, q.len[0] + rnd() * (q.len[1] - q.len[0]), q.w, c);
+  }).join('');
+}
+
+// Rolled-up ball: quills point straight out in every direction.
+function ballSvg(stage, c, sleeping) {
+  const q = QUILLS[stage], rnd = seeded(31 + stage);
+  const pts = [];
+  for (let i = 0; i < q.n + 50; i++) {
+    const a = rnd() * Math.PI * 2, r = 46 * Math.sqrt(rnd());
+    if (128 + Math.sin(a) * r * .9 <= 168) pts.push([a, r]);
+  }
+  const quills = pts.sort((u, v) => u[1] - v[1]).map(([a, r]) =>
+    quill(120 + Math.cos(a) * r, 128 + Math.sin(a) * r * .9, a + (rnd() - .5) * .3, q.len[0] + rnd() * (q.len[1] - q.len[0]), q.w, c)).join('');
+  return `<ellipse cx="120" cy="184" rx="62" ry="7" fill="rgba(0,0,0,.2)"/>
+    <ellipse cx="120" cy="130" rx="56" ry="52" fill="${c.dark}"/>
+    <g stroke-linecap="round">${quills}</g>
+    <path d="M140 168 Q156 154 172 166 Q170 178 150 180 Q140 178 140 168 Z" fill="${c.face}"/>
+    <ellipse cx="171" cy="169" rx="4.5" ry="3.8" fill="#16100c"/>
+    ${sleeping ? `<path d="M151 164 Q155 167 159 164" stroke="#2a1d16" stroke-width="2" fill="none" stroke-linecap="round"/>` : `<circle cx="156" cy="164" r="2.6" fill="${c.eye}"/>`}`;
 }
 
 function gearSvg(id) {
   switch (id) {
-    case 'ribbon': return `<g transform="translate(134 50) rotate(18)">
-      <path d="M0 0 L-18 -11 Q-22 0 -18 11 Z" fill="#f07aa0"/><path d="M0 0 L18 -11 Q22 0 18 11 Z" fill="#f07aa0"/>
-      <circle r="5" fill="#d9507e"/></g>`;
-    case 'flower': return `<g transform="translate(136 56)">
-      ${[0, 72, 144, 216, 288].map((a) => `<ellipse rx="6" ry="10" transform="rotate(${a}) translate(0 -8)" fill="#fff6c9"/>`).join('')}
-      <circle r="6" fill="#f2b33d"/></g>`;
+    case 'ribbon': return `<g transform="translate(112 62) rotate(-12)">
+      <path d="M0 0 L-16 -10 Q-20 0 -16 10 Z" fill="#f07aa0"/><path d="M0 0 L16 -10 Q20 0 16 10 Z" fill="#f07aa0"/>
+      <circle r="4.5" fill="#d9507e"/></g>`;
+    case 'flower': return `<g transform="translate(134 66)">
+      ${[0, 72, 144, 216, 288].map((a) => `<ellipse rx="5" ry="8.5" transform="rotate(${a}) translate(0 -7)" fill="#fff6c9"/>`).join('')}
+      <circle r="5" fill="#f2b33d"/></g>`;
     case 'shades': return `<g>
-      <rect x="64" y="111" width="30" height="20" rx="8" fill="#1d1d1f"/><rect x="106" y="111" width="30" height="20" rx="8" fill="#1d1d1f"/>
-      <path d="M94 118 Q100 114 106 118" stroke="#1d1d1f" stroke-width="4" fill="none"/>
-      <path d="M70 116 L78 116" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".6"/><path d="M112 116 L120 116" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".6"/></g>`;
-    case 'hat': return `<g transform="translate(100 46)">
-      <ellipse rx="54" ry="11" fill="#e5c375"/><path d="M-28 0 Q-26 -30 0 -32 Q26 -30 28 0 Z" fill="#edd08a"/>
-      <path d="M-27 -6 Q0 2 27 -6 L27 -1 Q0 7 -27 -1 Z" fill="#d6455f"/></g>`;
-    case 'crown': return `<g transform="translate(100 34)">
-      <path d="M-24 10 L-28 -14 L-12 -2 L0 -20 L12 -2 L28 -14 L24 10 Z" fill="#f2c94c" stroke="#c99a1e" stroke-width="2" stroke-linejoin="round"/>
-      <circle cx="0" cy="-20" r="4" fill="#d6455f"/><circle cx="-28" cy="-14" r="3" fill="#5fa8d3"/><circle cx="28" cy="-14" r="3" fill="#5fa8d3"/></g>`;
+      <path d="M158 116 L172 124" stroke="#1d1d1f" stroke-width="2.5"/>
+      <circle cx="180" cy="127" r="8.5" fill="#1d1d1f"/><path d="M176 123 L180 122" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".6"/></g>`;
+    case 'hat': return `<g transform="translate(150 86) rotate(14)">
+      <ellipse rx="34" ry="7" fill="#e5c375"/><path d="M-17 0 Q-16 -20 0 -21 Q16 -20 17 0 Z" fill="#edd08a"/>
+      <path d="M-16 -4 Q0 1 16 -4 L16 0 Q0 5 -16 0 Z" fill="#d6455f"/></g>`;
+    case 'crown': return `<g transform="translate(150 86) rotate(14)">
+      <path d="M-17 7 L-20 -10 L-8 -1 L0 -14 L8 -1 L20 -10 L17 7 Z" fill="#f2c94c" stroke="#c99a1e" stroke-width="1.6" stroke-linejoin="round"/>
+      <circle cx="0" cy="-14" r="3" fill="#d6455f"/><circle cx="-20" cy="-10" r="2.4" fill="#5fa8d3"/><circle cx="20" cy="-10" r="2.4" fill="#5fa8d3"/></g>`;
     default: return '';
   }
 }
 // Signature item each evolved form always wears.
 function formSvg(form) {
   switch (form) {
-    case 'athlete': return `<path d="M44 98 Q100 76 156 98 L154 108 Q100 88 46 108 Z" fill="#d6455f"/>
-      <path d="M150 98 L166 86 L160 99 L172 97 L156 114 L160 102 Z" fill="#f2c94c"/>`;
-    case 'foodie': return `<path d="M78 166 Q100 158 122 166 L117 186 Q100 192 83 186 Z" fill="#fff" stroke="#d6455f" stroke-width="2"/>
-      <circle cx="92" cy="174" r="2.5" fill="#d6455f"/><circle cx="104" cy="179" r="2.5" fill="#d6455f"/><circle cx="110" cy="170" r="2.5" fill="#d6455f"/>`;
-    case 'explorer': return `<path d="M56 164 Q100 184 144 164 L146 174 Q100 194 54 174 Z" fill="#3f8f5a"/>
-      <path d="M128 172 L140 196 L128 194 L122 176 Z" fill="#2f7448"/>`;
-    case 'sweet': return `<path d="M140 64 l3 7 7 1 -5 5 1 7 -6 -3 -6 3 1 -7 -5 -5 7 -1 z" fill="#ffd166"/>
-      <path d="M56 70 l2 5 5 1 -4 3 1 5 -4 -2 -4 2 1 -5 -4 -3 5 -1 z" fill="#ffd166"/>`;
+    case 'athlete': return `<path d="M154 100 Q172 104 190 120 L185 127 Q169 113 151 108 Z" fill="#d6455f"/>
+      <path d="M170 104 L176 99 L174 106 L180 105 L172 114 L174 107 Z" fill="#f2c94c"/>`;
+    case 'foodie': return `<path d="M176 160 Q192 160 204 156 L198 176 Q188 182 180 178 Z" fill="#fff" stroke="#d6455f" stroke-width="1.6"/>
+      <circle cx="186" cy="166" r="2" fill="#d6455f"/><circle cx="194" cy="170" r="2" fill="#d6455f"/>`;
+    case 'explorer': return `<path d="M146 108 Q160 136 154 168 L166 168 Q172 136 158 104 Z" fill="#3f8f5a"/>
+      <path d="M150 120 Q128 116 112 126 L116 134 Q132 126 152 130 Z" fill="#2f7448"/>`;
+    case 'sweet': return `<path d="M96 52 l2.6 6 6 .8 -4.4 4.2 1 6 -5.2 -2.8 -5.2 2.8 1 -6 -4.4 -4.2 6 -.8 z" fill="#ffd166"/>
+      <path d="M150 74 l2 4.4 4.6 .6 -3.4 3.2 .8 4.6 -4 -2.2 -4 2.2 .8 -4.6 -3.4 -3.2 4.6 -.6 z" fill="#ffd166"/>`;
     default: return '';
   }
 }
 
 function hogSvg(mood, stage, wear, form) {
-  const st = STAGES[stage];
-  const c = form ? FORMS[form] : BASE_COLORS;
-  const face = mood === 'sick' ? '#e3dcb0' : form === 'sweet' ? '#fbe4e4' : '#f2dcc0';
-  const snout = mood === 'sick' ? '#ece6c4' : '#f8e9d6';
-  const chub = form === 'foodie' ? 1.08 : 1;
-
-  if (mood === 'curl') {
-    return `<svg viewBox="0 0 200 200" aria-hidden="true"><g class="bob">
-      <ellipse cx="100" cy="190" rx="56" ry="7" fill="rgba(0,0,0,.18)"/>
-      <polygon points="${spikeRing(100, 134, 58, 54, st.spikes + 6, .26, 0, 360)}" fill="${c.dark}"/>
-      <polygon points="${spikeRing(100, 136, 50, 46, st.spikes + 4, .2, 10, 370)}" fill="${c.mid}"/>
-      <circle cx="100" cy="136" r="42" fill="${c.mid}"/>
-      <polygon points="${spikeRing(100, 138, 34, 30, st.spikes, .22, 0, 360)}" fill="${c.tip}" opacity=".5"/>
-      <ellipse cx="118" cy="160" rx="9" ry="6" fill="${face}"/><circle cx="124" cy="161" r="3" fill="#3a2a22"/>
-    </g></svg>`;
+  const c = COATS[form || (stage === 0 ? 'hoglet' : 'base')];
+  if (mood === 'curl' || mood === 'sleep') {
+    return `<svg viewBox="0 0 240 200" aria-hidden="true"><g class="bob">${ballSvg(stage, c, mood === 'sleep')}</g></svg>`;
   }
+  const chub = form === 'foodie' ? 1.07 : 1;
+  const face = mood === 'sick' ? '#d3cfa2' : c.face;
+  const ex = 178, ey = 128;
+  let eye, mouth, extra = '';
+  if (mood === 'happy' || mood === 'eat') eye = `<path d="M${ex - 5} ${ey + 1} Q${ex} ${ey - 5} ${ex + 5} ${ey + 1}" stroke="#16100c" stroke-width="2.8" fill="none" stroke-linecap="round"/>`;
+  else if (mood === 'sick') eye = `<path d="M${ex - 5} ${ey} L${ex + 5} ${ey}" stroke="#16100c" stroke-width="2.6" stroke-linecap="round"/><path d="M${ex - 4} ${ey} Q${ex} ${ey + 5} ${ex + 4} ${ey}" fill="#16100c"/>`;
+  else eye = `<g class="blink"><circle cx="${ex}" cy="${ey}" r="5.2" fill="${c.eye}"/><circle cx="${ex + 1.8}" cy="${ey - 1.8}" r="1.7" fill="#fff"/></g>`;
+  if (mood === 'eat') mouth = `<ellipse class="munch" cx="200" cy="157" rx="5" ry="3.6" fill="#7a3434"/>`;
+  else if (mood === 'happy') mouth = `<path d="M192 154 Q198 160 205 154" stroke="#3a2620" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+  else mouth = `<path d="M194 156 Q199 158 204 155" stroke="#3a2620" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
+  if (mood === 'sad') extra = `<path d="M${ex - 2} ${ey + 7} q-3 6 0 8 q3 -2 0 -8" fill="#7cc4f0"/>`;
+  if (mood === 'sick') extra = `<path d="M200 98 q5 -8 0 -14 q-5 -6 0 -12" stroke="#7fa35c" stroke-width="3" fill="none" stroke-linecap="round" opacity=".8"/>`;
+  if (mood === 'ant') extra = [[104, 84], [92, 98], [120, 76], [110, 104], [82, 116], [132, 92], [98, 120]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${3 + (x % 3)}" fill="#fff" opacity=".9"/>`).join('') +
+    `<circle cx="203" cy="160" r="3" fill="#fff"/><circle cx="198" cy="163" r="2.4" fill="#fff"/>`;
+  const headTilt = mood === 'sad' || mood === 'eat' ? 7 : mood === 'ant' ? -14 : 0;
 
-  let eyes, mouth = '', extra = '';
-  const eyeL = 80, eyeR = 120, ey = 122;
-  const arc = (x, up) => `<path d="M${x - 8} ${ey + (up ? 3 : 0)} Q${x} ${ey + (up ? -8 : 7)} ${x + 8} ${ey + (up ? 3 : 0)}" stroke="#2b211b" stroke-width="4.5" fill="none" stroke-linecap="round"/>`;
-  switch (mood) {
-    case 'happy': case 'eat': eyes = arc(eyeL, true) + arc(eyeR, true); break;
-    case 'sleep': eyes = arc(eyeL, false) + arc(eyeR, false); break;
-    case 'sick':
-      eyes = [eyeL, eyeR].map((x) => `<path d="M${x - 6} ${ey - 6} L${x + 6} ${ey + 6} M${x + 6} ${ey - 6} L${x - 6} ${ey + 6}" stroke="#2b211b" stroke-width="4" stroke-linecap="round"/>`).join('');
-      extra = `<path d="M150 92 q6 -10 0 -18 q-6 -8 0 -16" stroke="#7fa35c" stroke-width="4" fill="none" stroke-linecap="round" opacity=".8"/>`;
-      break;
-    case 'sad':
-      eyes = [eyeL, eyeR].map((x) => `<g class="blink"><circle cx="${x}" cy="${ey + 2}" r="7" fill="#2b211b"/><circle cx="${x + 2.5}" cy="${ey - 0.5}" r="2.4" fill="#fff"/></g>`).join('') +
-        `<path d="M${eyeL - 10} ${ey - 12} L${eyeL + 6} ${ey - 16}" stroke="#6b4a33" stroke-width="3.5" stroke-linecap="round"/>
-         <path d="M${eyeR + 10} ${ey - 12} L${eyeR - 6} ${ey - 16}" stroke="#6b4a33" stroke-width="3.5" stroke-linecap="round"/>
-         <path d="M${eyeL - 4} ${ey + 10} q-4 8 0 11 q4 -3 0 -11" fill="#7cc4f0"/>`;
-      break;
-    default:
-      eyes = [eyeL, eyeR].map((x) => `<g class="blink"><circle cx="${x}" cy="${ey}" r="7.5" fill="#2b211b"/><circle cx="${x + 2.6}" cy="${ey - 2.6}" r="2.6" fill="#fff"/></g>`).join('');
-  }
-  if (mood === 'eat') mouth = `<ellipse class="munch" cx="100" cy="148" rx="7" ry="6" fill="#8a3b3b"/>`;
-  else if (mood === 'happy') mouth = `<path d="M91 144 Q100 155 109 144 Z" fill="#8a3b3b"/>`;
-  else if (mood === 'sad' || mood === 'sick') mouth = `<path d="M93 150 Q100 144 107 150" stroke="#5a3a2c" stroke-width="3" fill="none" stroke-linecap="round"/>`;
-  else if (mood === 'sleep') mouth = `<circle cx="100" cy="148" r="2.5" fill="#8a3b3b"/>`;
-  else mouth = `<path d="M93 144 Q96.5 149 100 144 Q103.5 149 107 144" stroke="#5a3a2c" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
-
-  return `<svg viewBox="0 0 200 200" aria-hidden="true"><g class="bob">
-    <ellipse cx="100" cy="190" rx="62" ry="7" fill="rgba(0,0,0,.18)"/>
-    <g transform="translate(100 120) scale(${chub} 1) translate(-100 -120)">
-      <polygon points="${spikeRing(100, 118, 70, 62, st.spikes, .32, 150, 390)}" fill="${c.dark}"/>
-      <polygon points="${spikeRing(100, 120, 62, 55, st.spikes - 2, .24, 158, 382)}" fill="${c.mid}"/>
-      <ellipse cx="100" cy="128" rx="66" ry="56" fill="${c.mid}"/>
-      <polygon points="${spikeRing(100, 120, 52, 44, st.spikes - 4, .18, 165, 375)}" fill="${c.tip}" opacity=".5"/>
+  return `<svg viewBox="0 0 240 200" aria-hidden="true"><g class="bob">
+    <ellipse cx="120" cy="184" rx="86" ry="7" fill="rgba(0,0,0,.2)"/>
+    <g class="legs">
+      <rect x="146" y="164" width="9" height="15" rx="4" fill="${c.skin}" opacity=".75"/>
+      <rect x="76" y="164" width="9" height="15" rx="4" fill="${c.skin}" opacity=".75"/>
     </g>
-    <circle cx="62" cy="92" r="11" fill="${face}"/><circle cx="62" cy="92" r="5.5" fill="#e9a5a0"/>
-    <circle cx="138" cy="92" r="11" fill="${face}"/><circle cx="138" cy="92" r="5.5" fill="#e9a5a0"/>
-    <path d="M48 140 Q46 96 100 94 Q154 96 152 140 Q150 178 100 180 Q50 178 48 140 Z" fill="${face}"/>
-    <ellipse cx="100" cy="142" rx="24" ry="17" fill="${snout}"/>
-    <ellipse cx="68" cy="140" rx="9" ry="5.5" fill="#f2a7a0" opacity="${mood === 'sick' ? .2 : .7}"/>
-    <ellipse cx="132" cy="140" rx="9" ry="5.5" fill="#f2a7a0" opacity="${mood === 'sick' ? .2 : .7}"/>
-    ${eyes}
-    <ellipse cx="100" cy="134" rx="7" ry="5.5" fill="#3a2a22"/><ellipse cx="98" cy="132.5" rx="2.2" ry="1.4" fill="#fff" opacity=".7"/>
-    ${mouth}
-    <ellipse cx="74" cy="182" rx="13" ry="8" fill="${face}"/><ellipse cx="126" cy="182" rx="13" ry="8" fill="${face}"/>
-    ${form ? formSvg(form) : ''}
-    ${wear ? gearSvg(wear) : ''}
+    <g transform="translate(110 170) scale(${chub} 1) translate(-110 -170)">
+      <path d="M30 170 Q34 176 60 176 L176 174 Q190 172 186 160 L186 120 Q172 64 110 62 Q48 64 32 122 Z" fill="${c.dark}"/>
+      <path d="M40 166 Q100 182 176 168 L176 176 Q100 186 40 176 Z" fill="${c.belly}"/>
+      <g stroke-linecap="round">${coat(stage, c)}</g>
+    </g>
+    <g class="legs legs-near">
+      <rect x="164" y="166" width="10" height="15" rx="4.5" fill="${c.skin}"/>
+      <rect x="58" y="166" width="10" height="15" rx="4.5" fill="${c.skin}"/>
+      <path d="M166 181 l1.5 2.5 M169 181 l1.5 2.5 M172 181 l1.5 2.5 M60 181 l1.5 2.5 M63 181 l1.5 2.5" stroke="#5a3d33" stroke-width="1.1" stroke-linecap="round"/>
+    </g>
+    <g class="head" transform="rotate(${headTilt} 156 140)">
+      <path d="M148 104 Q176 100 200 126 Q214 138 218 146 Q220 156 208 159 Q186 166 160 168 Q146 168 144 150 Q142 116 148 104 Z" fill="${face}"/>
+      <path d="M150 140 Q170 150 196 150 Q186 164 160 166 Q148 164 150 140 Z" fill="${c.belly}" opacity=".55"/>
+      <ellipse cx="186" cy="145" rx="7" ry="4" fill="#f2a7a0" opacity="${mood === 'sick' ? .1 : .35}"/>
+      <ellipse cx="160" cy="104" rx="8" ry="9" fill="${c.face}" transform="rotate(-18 160 104)"/>
+      <ellipse cx="160" cy="105" rx="4" ry="5" fill="${c.skin}" transform="rotate(-18 160 105)"/>
+      ${eye}
+      <g class="sniff"><ellipse cx="216" cy="148" rx="6.2" ry="5.2" fill="#16100c"/><ellipse cx="214" cy="146" rx="1.8" ry="1.2" fill="#fff" opacity=".55"/></g>
+      ${mouth}
+      <path d="M206 150 L230 144 M206 152 L231 152 M205 154 L228 160" stroke="#3a2620" stroke-width=".7" opacity=".5"/>
+      ${form ? formSvg(form) : ''}
+      ${wear === 'shades' ? gearSvg('shades') : ''}
+    </g>
+    ${wear && wear !== 'shades' ? gearSvg(wear) : ''}
     ${extra}
   </g></svg>`;
 }
@@ -761,6 +813,7 @@ function hogSvg(mood, stage, wear, form) {
 function moodOf(now) {
   if (T.curlUntil > now) return 'curl';
   if (S.sleeping) return 'sleep';
+  if (T.antUntil > now) return 'ant';
   if (T.eatUntil > now) return 'eat';
   if (S.sick) return 'sick';
   if (Math.min(S.full, S.happy, S.clean, S.energy) < 20) return 'sad';
@@ -1182,6 +1235,15 @@ function medicine() {
   render(); save();
 }
 
+// Self-anointing: real hedgehogs foam at the mouth and lick the froth onto their quills when they meet a new smell.
+function anting(reason) {
+  if (S.sleeping || S.explore || T.game) return;
+  T.antUntil = Date.now() + 4500;
+  render();
+  say(reason || '킁킁… 처음 맡는 냄새다! 안팅 중! (침 거품을 가시에 발라요)', 4300);
+  setTimeout(render, 4600);
+}
+
 /* ================= expeditions ================= */
 const exploreMult = () => (S.form === 'explorer' ? .8 : 1);
 function openExplore() {
@@ -1257,8 +1319,10 @@ let walkTimer = 0;
 function wander() {
   clearTimeout(walkTimer);
   walkTimer = setTimeout(wander, rand(4000, 9000));
-  if (!adopted || S.sleeping || S.explore || T.game || T.curlUntil > Date.now() || T.eatUntil > Date.now()) return;
-  hog.style.left = rand(36, 74) + '%';
+  if (!adopted || S.sleeping || S.explore || T.game || T.curlUntil > Date.now() || T.eatUntil > Date.now() || T.antUntil > Date.now()) return;
+  const x = rand(30, 72), from = parseFloat(hog.style.left) || 50;
+  hog.classList.toggle('left', x < from);
+  hog.style.left = x + '%';
   hog.classList.add('walking');
   setTimeout(() => hog.classList.remove('walking'), 2600);
 }
@@ -1426,8 +1490,11 @@ function gameCatch() {
     const left = 30 - el;
     $('gTime').textContent = Math.max(0, Math.ceil(left));
     if (left <= 0) return end('시간 끝!');
-    g.x += (g.target - g.x) * Math.min(1, dt * 12);
+    const dx = (g.target - g.x) * Math.min(1, dt * 12);
+    g.x += dx;
     catcher.style.left = g.x + '%';
+    if (Math.abs(dx) > .05) catcher.classList.toggle('left', dx < 0);
+    catcher.classList.toggle('moving', Math.abs(dx) > .05);
     if (now >= g.nextSpawn) {
       const it = weighted();
       const node = document.createElement('div'); node.className = 'faller'; node.textContent = it.g;
@@ -1542,7 +1609,7 @@ function openShop() {
       if (S.coins < g.price) return;
       S.coins -= g.price; S.owned.push(k); S.wear = k;
       sfx('coin'); toast(`${g.name}을(를) 샀어요`); track('buy');
-      say('어때? 나 좀 멋있지?');
+      setTimeout(() => anting('킁킁, 새 물건 냄새! 안팅 중… 이제 내 거야!'), 600);
     } else {
       S.wear = S.wear === k ? null : k;
       sfx('pop');
@@ -1614,6 +1681,7 @@ function chatter(now) {
   if (now < T.nextChat || now < T.speakUntil || T.game || S.explore || !sheetWrap.hidden || T.cardOpen) return;
   T.nextChat = now + rand(11000, 18000);
   if (S.sleeping) return;
+  if (S.happy >= 50 && !S.sick && Math.random() < .06) { anting(); return; }
   let line;
   if (S.sick) line = '으슬으슬… 약 좀 줘…';
   else if (S.poops.length >= 2) line = pick(['여기 냄새 실화야? 응가 좀 치워 줘!', '응가 밟을 것 같아…']);

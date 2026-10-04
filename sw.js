@@ -1,5 +1,5 @@
 // Offline cache so the game opens without a network once installed.
-const CACHE = 'dochi-v2';
+const CACHE = 'dochi-v3';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (e) => {
