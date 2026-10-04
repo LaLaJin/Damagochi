@@ -58,6 +58,9 @@ button { font: inherit; color: inherit; }
 /* header */
 .top { display: flex; align-items: flex-end; gap: 12px; }
 .who { flex: 1; min-width: 0; }
+.name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rename { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 99px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+.rename:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .name { margin: 0; font-family: var(--font-head); font-weight: 700; font-size: 26px; line-height: 1.15; overflow-wrap: anywhere; }
 .meta { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .icon-btn { flex: none; border: 1px solid var(--line); background: var(--surface); height: 36px; padding: 0 12px; border-radius: 10px; cursor: pointer; font-size: 13px; color: var(--muted); }
@@ -207,7 +210,7 @@ button { font: inherit; color: inherit; }
 <div class="app">
   <header class="top">
     <div class="who">
-      <h1 class="name" id="name">도치</h1>
+      <div class="name-row"><h1 class="name" id="name">도치</h1><button class="rename" id="renameBtn" type="button" aria-label="이름 바꾸기">✎ 이름 바꾸기</button></div>
       <p class="meta" id="meta">아프리카 피그미 고슴도치</p>
     </div>
     <button class="icon-btn" id="menuBtn" type="button">기록 · 가이드</button>
@@ -357,8 +360,8 @@ function setAct(s, act, t, mins) {
   endSession(s, t);
   s.act = act; s.actUntil = t + mins * MIN;
   s.sess = { act, start: t, m: 0, g: 0 };
-  if (prev === 'sleep' && act !== 'sleep' && act !== 'torpor') log(s, t, '잠에서 깨어 은신처 밖으로 나왔어요');
-  if (prev !== 'sleep' && prev !== 'torpor' && act === 'sleep') log(s, t, '은신처로 들어가 몸을 말고 잠들었어요');
+  if (prev === 'sleep' && act !== 'sleep' && act !== 'torpor') log(s, t, '잠에서 깨어 오두막 밖으로 나왔어요');
+  if (prev !== 'sleep' && prev !== 'torpor' && act === 'sleep') log(s, t, '나무 오두막으로 들어가 몸을 말고 잠들었어요');
 }
 function addPoop(s, where) {
   if (s.poops.length >= 14) return;
@@ -450,8 +453,9 @@ function catchUp(s, until) {
 // Units are decimetres: an adult African pygmy hedgehog is about 1.9 long, the cage 9 x 4.8.
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const BED = .3;                                        // bedding surface height
-const IGLOO = V3(-3.0, BED, -.8), IGLOO_R = 1.15;
-const IGLOO_IN = V3(-3.0, BED, -.95), IGLOO_DOOR = V3(-3.0, BED, .75);
+// the hedgehog's house: a little log cabin with its door facing the front of the cage
+const IGLOO = V3(-3.1, BED, -.85), IGLOO_R = .85;
+const IGLOO_IN = V3(-3.1, BED, -.45), IGLOO_DOOR = V3(-3.1, BED, .95);
 const FOOD = V3(-1.2, BED, 1.45), WATER = V3(.6, BED, 1.45);
 const WHEEL_C = V3(2.95, 1.85, -.4), WHEEL_R = 1.45, WHEEL_ENTRY = V3(1.6, BED, .45);
 const CORNER = V3(3.7, BED, 1.6);
@@ -741,13 +745,67 @@ function buildRoom(scene) {
   const bedMat = new THREE.MeshStandardMaterial({ map: bedTex, roughness: 1 });
   cage.add(mesh(bedGeo, bedMat, { p: V3(0, BED - .02, 0), r: [-Math.PI / 2, 0, 0], recv: true, cast: false }));
 
-  // igloo hide: translucent dome with the doorway facing the front
-  const igloo = mesh(new THREE.SphereGeometry(IGLOO_R, 44, 22, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: col('#8f7cc0'), transparent: true, opacity: .78, roughness: .3, side: THREE.DoubleSide, depthWrite: false }), { p: IGLOO });
-  igloo.renderOrder = 1; cage.add(igloo);
-  const door = new THREE.Shape(); door.moveTo(-.42, 0); door.lineTo(-.42, .34); door.absarc(0, .34, .42, Math.PI, 0, true); door.lineTo(.42, 0); door.lineTo(-.42, 0);
-  const doorM = mesh(new THREE.ShapeGeometry(door, 16), new THREE.MeshBasicMaterial({ color: 0x2a2140, transparent: true, opacity: .55, depthWrite: false }), { p: V3(IGLOO.x, BED + .01, IGLOO.z + IGLOO_R - .12), r: [-.12, 0, 0], cast: false });
-  doorM.renderOrder = 3; cage.add(doorM);
+  // log cabin: stacked logs, a red roof, a chimney, a window and an arched doorway with a name sign
+  const cabin = new THREE.Group(); cabin.position.copy(IGLOO); cage.add(cabin);
+  const HW = 1.05, HD = .9, LOG = .105, ROWS = 6, DOOR_W = .5, DOOR_H = .95;
+  const grain = canvasTex(256, 64, (g, w, h) => {
+    g.fillStyle = '#b07a44'; g.fillRect(0, 0, w, h); const rr = seeded(51);
+    for (let i = 0; i < 26; i++) { g.strokeStyle = rr() < .5 ? 'rgba(90,55,25,.35)' : 'rgba(230,190,140,.25)'; g.lineWidth = 1 + rr() * 2; g.beginPath(); const y = rr() * h; g.moveTo(0, y); g.bezierCurveTo(w * .3, y + 4, w * .6, y - 4, w, y + rr() * 3); g.stroke(); }
+  });
+  const logMat = new THREE.MeshStandardMaterial({ map: grain, roughness: .8 });
+  const endMat = std('#d8b07a', { roughness: .8 }), roofMat = std('#c2523c', { roughness: .6 }), trim = std('#7a4b2a', { roughness: .7 });
+  const logX = (x0, x1, y, z) => { const L = x1 - x0, m = mesh(new THREE.CylinderGeometry(LOG, LOG, L, 14), [logMat, endMat, endMat], { p: V3((x0 + x1) / 2, y, z), r: [0, 0, Math.PI / 2], recv: true }); cabin.add(m); };
+  const logZ = (z0, z1, y, x) => { const L = z1 - z0, m = mesh(new THREE.CylinderGeometry(LOG, LOG, L, 14), [logMat, endMat, endMat], { p: V3(x, y, (z0 + z1) / 2), r: [Math.PI / 2, 0, 0], recv: true }); cabin.add(m); };
+  for (let i = 0; i < ROWS; i++) {
+    const y = LOG + i * LOG * 1.9, ov = .14;
+    logX(-HW - ov, HW + ov, y, -HD);                      // back wall
+    if (y + LOG < DOOR_H) { logX(-HW - ov, -DOOR_W, y, HD); logX(DOOR_W, HW + ov, y, HD); } // front wall around the door
+    else logX(-HW - ov, HW + ov, y, HD);
+    logZ(-HD - ov, HD + ov, y + LOG * .95, -HW);          // side walls sit half a log higher
+    logZ(-HD - ov, HD + ov, y + LOG * .95, HW);
+  }
+  const wallTop = LOG + (ROWS - 1) * LOG * 1.9 + LOG;
+  // gables and a pitched roof that overhangs the walls
+  const gable = new THREE.Shape(); gable.moveTo(-HW, 0); gable.lineTo(HW, 0); gable.lineTo(0, .78); gable.lineTo(-HW, 0);
+  for (const z of [-HD, HD]) cabin.add(mesh(new THREE.ExtrudeGeometry(gable, { depth: .12, bevelEnabled: false }), logMat, { p: V3(0, wallTop, z - .06) }));
+  const slope = Math.atan2(.78, HW), roofLen = Math.hypot(HW, .78) + .28;
+  for (const sgn of [-1, 1]) {
+    cabin.add(mesh(new THREE.BoxGeometry(roofLen, .1, HD * 2 + .5), roofMat, { p: V3(sgn * (HW / 2 + .06), wallTop + .4 + .05, 0), r: [0, 0, -sgn * slope] }));
+  }
+  cabin.add(mesh(new THREE.CylinderGeometry(.07, .07, HD * 2 + .5, 10), trim, { p: V3(0, wallTop + .86, 0), r: [Math.PI / 2, 0, 0] }));
+  cabin.add(mesh(new THREE.BoxGeometry(.28, .5, .28), std('#9c5a3c', { roughness: .8 }), { p: V3(.55, wallTop + .75, -.35) }));
+  cabin.add(mesh(new THREE.BoxGeometry(.34, .06, .34), std('#6e3f2a'), { p: V3(.55, wallTop + 1.02, -.35) }));
+  // arched doorway: dark inside, a wooden frame around it
+  const arch = new THREE.Shape(); arch.moveTo(-DOOR_W, 0); arch.lineTo(-DOOR_W, DOOR_H - DOOR_W); arch.absarc(0, DOOR_H - DOOR_W, DOOR_W, Math.PI, 0, true); arch.lineTo(DOOR_W, 0); arch.lineTo(-DOOR_W, 0);
+  cabin.add(mesh(new THREE.ShapeGeometry(arch, 20), std('#2a1a10', { roughness: 1 }), { p: V3(0, .01, -HD + LOG + .02), cast: false }));
+  const frameCurve = new THREE.CurvePath();
+  frameCurve.add(new THREE.LineCurve3(V3(-DOOR_W, 0, 0), V3(-DOOR_W, DOOR_H - DOOR_W, 0)));
+  frameCurve.add(new THREE.CatmullRomCurve3(Array.from({ length: 13 }, (_, i) => { const a = Math.PI - i * Math.PI / 12; return V3(Math.cos(a) * DOOR_W, DOOR_H - DOOR_W + Math.sin(a) * DOOR_W, 0); })));
+  frameCurve.add(new THREE.LineCurve3(V3(DOOR_W, DOOR_H - DOOR_W, 0), V3(DOOR_W, 0, 0)));
+  cabin.add(mesh(new THREE.TubeGeometry(frameCurve, 48, .05, 8), trim, { p: V3(0, 0, HD + LOG * .9) }));
+  // a window with crossbars on the side
+  const win = new THREE.Group(); win.position.set(HW + LOG + .01, .62, -.1); win.rotation.y = Math.PI / 2; cabin.add(win);
+  win.add(mesh(new THREE.PlaneGeometry(.42, .38), std('#3a5f7a', { roughness: .15, metalness: .2 }), { cast: false }));
+  for (const [w, h, x, y] of [[.5, .06, 0, .22], [.5, .06, 0, -.22], [.06, .5, .24, 0], [.06, .5, -.24, 0], [.42, .035, 0, 0], [.035, .38, 0, 0]]) win.add(mesh(new THREE.BoxGeometry(w, h, .04), trim, { p: V3(x, y, .02) }));
+  // name sign over the door
+  const signC = document.createElement('canvas'); signC.width = 512; signC.height = 128;
+  const signTex = new THREE.CanvasTexture(signC); signTex.encoding = THREE.sRGBEncoding;
+  const sign = new THREE.Group(); sign.position.set(0, DOOR_H + .2, HD + LOG + .06); cabin.add(sign);
+  sign.add(mesh(new THREE.BoxGeometry(1.08, .3, .05), std('#e9d2a6', { roughness: .7 })));
+  sign.add(mesh(new THREE.PlaneGeometry(1.02, .26), new THREE.MeshBasicMaterial({ map: signTex, transparent: true }), { p: V3(0, 0, .03), cast: false }));
+  const setSign = (name) => {
+    const g = signC.getContext('2d'); g.clearRect(0, 0, 512, 128);
+    g.fillStyle = '#5a3418'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const text = `${name}네 집`; let size = 72; g.font = `700 ${size}px "Gowun Batang", serif`;
+    while (g.measureText(text).width > 470 && size > 30) { size -= 4; g.font = `700 ${size}px "Gowun Batang", serif`; }
+    g.fillText(text, 256, 68); signTex.needsUpdate = true;
+  };
+  setSign('도치');
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (R) R.signName = null; });
+  // floating "Z z z" while the hedgehog sleeps inside
+  const zTex = canvasTex(128, 128, (g) => { g.fillStyle = '#ffffff'; g.strokeStyle = '#4b5f8a'; g.lineWidth = 10; g.font = '700 100px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.strokeText('Z', 64, 70); g.fillText('Z', 64, 70); });
+  const zzz = [];
+  for (let i = 0; i < 3; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: zTex, transparent: true, depthWrite: false })); sp.visible = false; cage.add(sp); zzz.push(sp); }
 
   // solid-surface wheel on a stand
   const wheel = new THREE.Group(); wheel.position.copy(WHEEL_C); cage.add(wheel);
@@ -804,7 +862,7 @@ function buildRoom(scene) {
     palm.add(mesh(new THREE.CylinderGeometry(.42, .48, 2.4, 18), handMat, { p: V3(0, -.2, 1.75), r: [Math.PI / 2 - .15, 0, 0] }));
   }
 
-  return { bedMat, sky, skyTex, clk, clkTex, wheel, wheelPoops, kib, water, thermo, bulbMat, poops, shed, hands, lampG };
+  return { setSign, zzz, bedMat, sky, skyTex, clk, clkTex, wheel, wheelPoops, kib, water, thermo, bulbMat, poops, shed, hands, lampG };
 }
 
 /* ---------- renderer, lights, camera ---------- */
@@ -930,7 +988,7 @@ const hogScale = () => .55 + .45 * (stageOf(S) - 1) / (STAGE_MAX - 1);
 const OBST = [
   { kind: 'bowl', x: FOOD.x, z: FOOD.z, r: .64 }, { kind: 'bowl', x: WATER.x, z: WATER.z, r: .64 },
   { kind: 'wheel', box: [1.4, 4.5, -1.35, .3], x: 2.95, z: -.52, r: 1.65 },
-  { kind: 'igloo', x: IGLOO.x, z: IGLOO.z, r: IGLOO_R + .04 },
+  { kind: 'igloo', box: [IGLOO.x - 1.27, IGLOO.x + 1.27, IGLOO.z - 1.02, IGLOO.z + 1.02], x: IGLOO.x, z: IGLOO.z, r: 1.4 },
 ];
 const CAGE_X = 4.42, CAGE_Z = 2.32;
 // The hedgehog is two circles: its body, and its head out in front. Push both out of bowls, the hide,
@@ -1131,6 +1189,15 @@ function frame(ts) {
   updateEnvironment(now, dt);
   updateProps(dt);
   runFx(dt);
+  if (R.signName !== S.name) { R.signName = S.name; R.room.setSign(S.name); }
+  const dozing = S.act === 'sleep' && !T.mode && !R.carry && R.H && R.H.pos.distanceTo(IGLOO_IN) < .4;
+  R.room.zzz.forEach((z, i) => {
+    const k = ((R.t * .35 + i / 3) % 1);
+    z.visible = dozing;
+    z.position.set(IGLOO.x + .3 + k * .5, BED + 2.2 + k * 1.1, IGLOO.z + .2);
+    z.scale.setScalar(.25 + k * .35);
+    z.material.opacity = Math.sin(k * Math.PI);
+  });
   const { pose, focus } = driveHog(now, dt);
   poseHog(R.hog, pose, R.t, dt);
   updateCamera(focus, dt);
@@ -1396,7 +1463,7 @@ try { T.zoom = !!localStorage.getItem('hedgehog-zoom'); } catch (e) { T.zoom = f
 function renderScene() { setView(); $('scene').classList.toggle('holding', T.mode === 'hand'); }
 
 /* ================= panel rendering ================= */
-const ACT_TEXT = { sleep: '은신처에서 자는 중', torpor: '동면 시도 중 · 위험', wheel: '쳇바퀴 달리는 중', eat: '사료 먹는 중', drink: '물 마시는 중', rest: '몸을 말고 쉬는 중', roam: '케이지 안을 돌아다니는 중' };
+const ACT_TEXT = { sleep: '오두막에서 자는 중', torpor: '동면 시도 중 · 위험', wheel: '쳇바퀴 달리는 중', eat: '사료 먹는 중', drink: '물 마시는 중', rest: '몸을 말고 쉬는 중', roam: '케이지 안을 돌아다니는 중' };
 const COND = [
   { k: 'satiety', label: '포만감' }, { k: 'hydration', label: '수분' },
   { k: 'clean', label: '청결', get: (s) => 100 - s.dirt }, { k: 'trust', label: '신뢰도' },
@@ -1832,8 +1899,9 @@ function openMenu() {
     ${weightChart()}
     <div class="sec">관찰 일지 전체</div>
     <ul class="log">${S.log.slice(0, 40).map((e) => `<li class="${e.bad ? 'bad' : ''}"><time>${new Date(e.t).getMonth() + 1}/${new Date(e.t).getDate()} ${hhmm(e.t)}</time><span>${esc(e.m)}</span></li>`).join('')}</ul>
-    <div class="actions"><button class="btn ghost" type="button" id="guideBtn">사육 가이드</button><button class="btn ghost" type="button" id="resetBtn">이 고슴도치 기록 지우기</button><button class="btn" type="button" id="switchBtn">고슴도치 바꾸기</button></div>`);
+    <div class="actions"><button class="btn ghost" type="button" id="guideBtn">사육 가이드</button><button class="btn ghost" type="button" id="menuRename">이름 바꾸기</button><button class="btn ghost" type="button" id="resetBtn">이 고슴도치 기록 지우기</button><button class="btn" type="button" id="switchBtn">고슴도치 바꾸기</button></div>`);
   $('switchBtn').addEventListener('click', showPicker);
+  $('menuRename').addEventListener('click', openRename);
   $('guideBtn').addEventListener('click', openGuide);
   $('resetBtn').addEventListener('click', () => {
     const b = $('resetBtn');
@@ -1843,11 +1911,34 @@ function openMenu() {
     adopted = false; closeSheet(); showPicker();
   });
 }
+function openRename() {
+  if (!adopted || T.mode) return;
+  openSheet(`<h3>이름 바꾸기</h3>
+    <p>새 이름을 적어 주세요. 오두막 문패도 같이 바뀌어요.</p>
+    <form id="renameForm" style="display:flex;flex-direction:column;gap:10px">
+      <input class="input" id="renameInput" maxlength="12" value="${esc(S.name)}" autocomplete="off" aria-label="새 이름">
+      <div class="actions"><button class="btn ghost" type="button" data-close>취소</button><button class="btn" type="submit">바꾸기</button></div>
+    </form>`);
+  const inp = $('renameInput'); inp.focus(); inp.select();
+  $('renameForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = inp.value.trim();
+    if (!v) { inp.focus(); return toast('이름을 한 글자 이상 적어 주세요'); }
+    if (v === S.name) return closeSheet();
+    const old = S.name;
+    S.name = v;
+    log(S, Date.now(), `이름을 ${old}에서 ${v}(으)로 바꿨어요`);
+    closeSheet(); render(); save();
+    toast(`이제 이름은 ${v}예요`);
+  });
+}
+$('renameBtn').addEventListener('click', openRename);
+
 function openGuide() {
   openSheet(`<h3>사육 가이드</h3>
     <div class="sec">온도</div><ul><li>케이지는 24~27°C로 유지해요. 20°C 아래로 오래 내려가면 동면을 시도하는데, 피그미 고슴도치에게는 위험해요.</li><li>밤에는 방이 더 추워지니 세라믹 히터를 켜 두세요.</li></ul>
     <div class="sec">먹이와 물</div><ul><li>고슴도치 전용 사료를 매일 채워 주세요. 다 자란 고슴도치는 하루 15~25g 정도 먹어요.</li><li>밀웜은 간식이에요. 하루 2~3마리면 충분하고, 많이 주면 비만이 돼요.</li><li>물은 매일 새 물로 갈아 주세요.</li></ul>
-    <div class="sec">생활 리듬</div><ul><li>야행성이라 낮에는 은신처에서 자요. 낮에 깨우면 스트레스를 받아요.</li><li>밤에는 쳇바퀴를 몇 km씩 달려요. 다리가 끼지 않는 원판형 쳇바퀴를 써요.</li></ul>
+    <div class="sec">생활 리듬</div><ul><li>야행성이라 낮에는 오두막 은신처에서 자요. 낮에 깨우면 스트레스를 받아요.</li><li>밤에는 쳇바퀴를 몇 km씩 달려요. 다리가 끼지 않는 원판형 쳇바퀴를 써요.</li></ul>
     <div class="sec">청소</div><ul><li>똥은 매일 치워 주세요. 특히 쳇바퀴 위에 많이 싸요.</li><li>베딩은 일주일에 한 번 전부 갈아 주세요. 지저분하면 진드기가 생길 수 있어요.</li></ul>
     <div class="sec">교감</div><ul><li>처음에는 겁을 먹고 몸을 말거나 "후웁" 소리를 내요. 매일 저녁 손에 올려 조용히 기다려 주면 신뢰가 쌓여요.</li><li>쓰다듬을 때는 가시 결을 따라 머리에서 꼬리 쪽으로 천천히 쓰다듬어요.</li><li>생후 8~12주는 가시가 새로 나는 가시갈이 시기라 특히 예민해요.</li></ul>
     <div class="sec">건강 관리</div><ul><li>체중을 자주 재서 기록해요. 갑자기 줄거나 늘면 병원에 가 보세요.</li><li>손톱은 2~4주마다 깎아요.</li><li>목욕은 발에 똥이 묻었을 때처럼 필요할 때만 해요. 자주 하면 피부가 건조해져요.</li><li>몸을 자꾸 긁고 가시가 많이 빠지면 진드기를 의심해요.</li></ul>
@@ -1923,7 +2014,7 @@ function showAdoption() {
   render();
   const morphs = Object.entries(COATS).map(([k, c]) => `<button class="opt" type="button" data-morph="${k}" aria-pressed="${k === 'sp'}">${swatch(c)}${c.label}</button>`).join('');
   openSheet(`<h3>고슴도치 데려오기</h3>
-    <p>생후 8주 된 아프리카 피그미 고슴도치를 집으로 데려왔어요. 케이지와 은신처, 쳇바퀴, 히터는 준비되어 있어요.</p>
+    <p>생후 8주 된 아프리카 피그미 고슴도치를 집으로 데려왔어요. 케이지와 나무 오두막, 쳇바퀴, 히터는 준비되어 있어요.</p>
     <div class="sec">이름</div>
     <input class="input" id="adName" maxlength="12" value="도치" autocomplete="off" aria-label="이름">
     <div class="sec">색</div>
@@ -1951,7 +2042,7 @@ function showAdoption() {
     SLOTS.ids.push(S.id); SLOTS.active = S.id; writeSlots();
     resetScene();
     closeSheet(); render(); save();
-    toast(isNight(now) ? '밤이라 깨어 있어요. 오늘은 조용히 지켜봐 주세요' : '낮이라 은신처에서 자고 있어요. 저녁에 깨어나요');
+    toast(isNight(now) ? '밤이라 깨어 있어요. 오늘은 조용히 지켜봐 주세요' : '낮이라 오두막에서 자고 있어요. 저녁에 깨어나요');
   });
 }
 
