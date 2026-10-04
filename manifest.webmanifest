@@ -1,0 +1,15 @@
+{
+  "name": "도치 키우기",
+  "short_name": "도치",
+  "description": "아기 고슴도치를 돌보고 키우는 다마고치 게임",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#e7ede1",
+  "theme_color": "#5f7d4a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

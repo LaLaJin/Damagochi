@@ -1,0 +1,1071 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5f7d4a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>도치 키우기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
+<style>
+/* Layout: one phone-sized column. Scene (the hedgehog's home) on top, care gauges, then a 4x2 action pad. */
+:root {
+  --bg: #e7ede1;
+  --surface: #f7f9f2;
+  --ink: #2e2a23;
+  --muted: #6c6a5c;
+  --line: #d3dbc8;
+  --accent: #c2416b;      /* berry */
+  --accent-ink: #ffffff;
+  --moss: #5f7d4a;
+  --good: #4f9a5b;
+  --warn: #d4952a;
+  --bad: #cf4a3c;
+  --shadow: 0 1px 0 rgba(46, 42, 35, .08), 0 6px 18px -10px rgba(46, 42, 35, .35);
+  --font-display: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1a1e19; --surface: #242a22; --ink: #ecebe2; --muted: #a5a897; --line: #39412f;
+    --accent: #e26a92; --accent-ink: #1a1e19; --moss: #92b373;
+    --good: #6fbf7a; --warn: #e8b04d; --bad: #ef6b5c;
+    --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 20px -12px rgba(0,0,0,.7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1a1e19; --surface: #242a22; --ink: #ecebe2; --muted: #a5a897; --line: #39412f;
+  --accent: #e26a92; --accent-ink: #1a1e19; --moss: #92b373;
+  --good: #6fbf7a; --warn: #e8b04d; --bad: #ef6b5c;
+  --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 20px -12px rgba(0,0,0,.7);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  -webkit-tap-highlight-color: transparent;
+  padding-inline: 16px;
+  padding-block: 12px 20px;
+}
+button { font: inherit; color: inherit; }
+.app { max-width: 460px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+
+/* ---------- header ---------- */
+.top { display: flex; align-items: center; gap: 12px; }
+.who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.name-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.name { font-family: var(--font-display); font-size: 26px; line-height: 1; margin: 0; overflow-wrap: anywhere; }
+.stage { font-size: 13px; color: var(--muted); }
+.xp { height: 5px; border-radius: 99px; background: var(--line); overflow: hidden; max-width: 180px; }
+.xp > i { display: block; height: 100%; background: var(--moss); width: 0; transition: width .4s; }
+.coins {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-display); font-size: 18px;
+  padding: 6px 12px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.berry { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ff9bb6, var(--accent) 60%); box-shadow: inset 0 -2px 0 rgba(0,0,0,.15); }
+.icon-btn { border: 1px solid var(--line); background: var(--surface); width: 38px; height: 38px; border-radius: 12px; cursor: pointer; display: grid; place-items: center; }
+.icon-btn svg { width: 18px; height: 18px; stroke: var(--muted); fill: none; stroke-width: 2; stroke-linecap: round; }
+
+/* ---------- scene ---------- */
+.scene {
+  position: relative; width: 100%; max-width: 100%; aspect-ratio: 4 / 3.3;
+  border-radius: 22px; overflow: hidden; isolation: isolate;
+  box-shadow: var(--shadow);
+  --sky1: #bfe3f2; --sky2: #eaf6ea; --ground1: #c9a978; --ground2: #b08d5c; --grass: #7da45d;
+  background: linear-gradient(to bottom, var(--sky1), var(--sky2) 70%);
+  transition: background 1s;
+  user-select: none; -webkit-user-select: none;
+}
+.scene[data-tod="dawn"]  { --sky1: #f6c7b4; --sky2: #fbe9cf; }
+.scene[data-tod="dusk"]  { --sky1: #e79a7c; --sky2: #f6d0a2; --grass: #6c8f50; }
+.scene[data-tod="night"] { --sky1: #142040; --sky2: #2f3f66; --ground1: #6d5a42; --ground2: #5a4935; --grass: #3f5a36; }
+.sky-body { position: absolute; top: 9%; right: 10%; width: 13%; aspect-ratio: 1; border-radius: 50%; background: #ffd65a; box-shadow: 0 0 0 8px rgba(255, 214, 90, .25), 0 0 40px rgba(255, 214, 90, .6); transition: all 1s; }
+.scene[data-tod="dusk"] .sky-body { background: #ff9d5c; top: 26%; box-shadow: 0 0 40px rgba(255, 140, 80, .6); }
+.scene[data-tod="night"] .sky-body { background: #f4f1d9; box-shadow: inset -9px -3px 0 0 #d9d4ad, 0 0 30px rgba(244, 241, 217, .35); }
+.stars { position: absolute; inset: 0 0 40% 0; opacity: 0; transition: opacity 1s; }
+.scene[data-tod="night"] .stars { opacity: 1; }
+.stars i { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #fff; animation: twinkle 3s infinite ease-in-out; }
+@keyframes twinkle { 50% { opacity: .25; } }
+.hill { position: absolute; left: -10%; right: -10%; bottom: 22%; height: 30%; border-radius: 50% 50% 0 0; background: var(--grass); opacity: .55; }
+.ground { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; background: linear-gradient(var(--ground1), var(--ground2)); }
+.ground::before { content: ""; position: absolute; left: 0; right: 0; top: -6px; height: 12px; background: radial-gradient(circle at 6px 6px, var(--grass) 6px, transparent 6.5px) 0 0 / 14px 12px repeat-x; }
+.hut { position: absolute; left: 4%; bottom: 20%; width: 24%; aspect-ratio: 1.15; }
+.hut svg { width: 100%; height: 100%; display: block; }
+
+.hog {
+  position: absolute; bottom: 9%; left: 50%; width: 40%; aspect-ratio: 1;
+  transform: translateX(-50%); transition: left 2.6s ease-in-out;
+  cursor: pointer; z-index: 3; touch-action: manipulation;
+}
+.hog-inner { width: 100%; height: 100%; transform-origin: 50% 100%; transition: transform .6s; }
+.hog svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.hog .bob { transform-origin: 100px 190px; animation: bob 2.4s infinite ease-in-out; }
+.hog.walking .bob { animation: waddle .45s infinite ease-in-out; }
+.hog.hop .bob { animation: hop .5s 2 ease-out; }
+.hog[data-mood="sleep"] .bob { animation: breathe 3.6s infinite ease-in-out; }
+.hog[data-mood="curl"] .bob { animation: shiver .12s infinite; }
+@keyframes bob { 50% { transform: translateY(-3px) scaleY(1.015); } }
+@keyframes waddle { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg) translateY(-3px); } }
+@keyframes hop { 40% { transform: translateY(-26px) scaleY(1.05); } 80% { transform: translateY(0) scaleY(.94); } }
+@keyframes breathe { 50% { transform: scaleY(.97) scaleX(1.02); } }
+@keyframes shiver { 50% { transform: translateX(1.5px); } }
+.blink { transform-box: fill-box; transform-origin: center; animation: blink 4.5s infinite; }
+@keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+.munch { transform-box: fill-box; transform-origin: center top; animation: munch .3s infinite; }
+@keyframes munch { 50% { transform: scaleY(.4); } }
+
+.bubble {
+  position: absolute; z-index: 6; left: 50%; bottom: 52%; transform: translateX(-50%);
+  max-width: 72%; width: max-content;
+  background: #fffdf7; color: #2e2a23; border-radius: 16px; padding: 8px 12px;
+  font-size: 14px; line-height: 1.35; text-align: center;
+  box-shadow: 0 4px 14px -6px rgba(0,0,0,.35);
+  transition: opacity .25s, transform .25s;
+}
+.bubble::after { content: ""; position: absolute; left: 50%; bottom: -7px; margin-left: -7px; border: 7px solid transparent; border-bottom: 0; border-top-color: #fffdf7; }
+.bubble.hide { opacity: 0; transform: translateX(-50%) translateY(6px); pointer-events: none; }
+
+.poop { position: absolute; bottom: 7%; font-size: clamp(18px, 6vw, 26px); z-index: 4; cursor: pointer; background: none; border: 0; padding: 4px; line-height: 1; animation: pop .35s ease-out; }
+.poop .stink { position: absolute; left: 50%; top: -10px; width: 2px; height: 10px; border-radius: 2px; background: #8a9a5b; opacity: .6; animation: stink 2s infinite; }
+@keyframes stink { 0% { transform: translateY(4px) scaleY(.4); opacity: 0; } 50% { opacity: .7; } 100% { transform: translateY(-8px); opacity: 0; } }
+@keyframes pop { from { transform: scale(0); } }
+
+.drop { position: absolute; z-index: 5; font-size: clamp(22px, 7vw, 30px); animation: drop .6s cubic-bezier(.3, 1.6, .5, 1) forwards; pointer-events: none; }
+@keyframes drop { from { transform: translateY(-120px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.float { position: absolute; z-index: 7; pointer-events: none; font-family: var(--font-display); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.45); animation: floatup 1.4s ease-out forwards; font-size: 18px; }
+@keyframes floatup { to { transform: translateY(-60px); opacity: 0; } }
+.bubbles i { position: absolute; z-index: 6; border-radius: 50%; border: 2px solid rgba(255,255,255,.9); background: rgba(190, 230, 255, .35); animation: suds 1.6s ease-out forwards; pointer-events: none; }
+@keyframes suds { from { transform: scale(.2); opacity: 1; } to { transform: translateY(-70px) scale(1); opacity: 0; } }
+
+.night-veil { position: absolute; inset: 0; z-index: 5; background: rgba(10, 14, 35, .55); opacity: 0; pointer-events: none; transition: opacity .8s; }
+.scene.sleeping .night-veil { opacity: 1; }
+.zzz { position: absolute; z-index: 6; font-family: var(--font-display); color: #e9ecff; pointer-events: none; animation: zzz 3s infinite ease-out; opacity: 0; }
+@keyframes zzz { 0% { transform: translate(0, 0) scale(.6); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(24px, -50px) scale(1.2); opacity: 0; } }
+
+/* mini-game */
+.game { position: absolute; inset: 0; z-index: 8; background: rgba(40, 30, 15, .28); }
+.game-hud { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; font-family: var(--font-display); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.5); font-size: 18px; font-variant-numeric: tabular-nums; }
+.worm { position: absolute; width: 54px; height: 54px; border: 0; background: none; padding: 0; cursor: pointer; animation: wormin .25s ease-out; touch-action: manipulation; }
+.worm svg { width: 100%; height: 100%; }
+.worm.got { animation: wormout .25s forwards; pointer-events: none; }
+@keyframes wormin { from { transform: scale(0) rotate(-30deg); } }
+@keyframes wormout { to { transform: scale(1.6); opacity: 0; } }
+.worm.gold svg .seg { fill: #f2c94c; }
+
+/* overlay card inside scene (naming, result) */
+.card {
+  position: absolute; inset: auto 12px 12px 12px; z-index: 9;
+  background: var(--surface); color: var(--ink); border-radius: 18px; padding: 16px;
+  box-shadow: 0 10px 30px -10px rgba(0,0,0,.5);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.card h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 20px; text-wrap: balance; }
+.card p { margin: 0; color: var(--muted); line-height: 1.5; font-size: 14px; }
+.row { display: flex; gap: 8px; }
+.input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+.btn { border: 0; border-radius: 12px; padding: 10px 16px; font-family: var(--font-display); font-size: 16px; cursor: pointer; background: var(--accent); color: var(--accent-ink); white-space: nowrap; }
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.btn:focus-visible, .act:focus-visible, .icon-btn:focus-visible, .item:focus-visible, .input:focus-visible { outline: 3px solid var(--moss); outline-offset: 2px; }
+
+/* ---------- gauges ---------- */
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 12px 14px; }
+.stat { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; min-width: 0; }
+.stat label { font-size: 13px; color: var(--muted); width: 3.4em; }
+.stat .val { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; width: 2em; text-align: right; }
+.bar { height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 50%; border-radius: inherit; background: var(--good); transition: width .5s, background .5s; }
+.stat.mid .bar > i { background: var(--warn); }
+.stat.low .bar > i { background: var(--bad); animation: pulse 1.2s infinite; }
+.stat.low label { color: var(--bad); }
+@keyframes pulse { 50% { opacity: .55; } }
+.status-line { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; min-height: 0; }
+.chip { font-size: 12px; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+.chip.alert { border-color: var(--bad); color: var(--bad); }
+.chip.calm { border-color: var(--moss); color: var(--moss); }
+
+/* ---------- action pad ---------- */
+.pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.act {
+  position: relative; border: 1px solid var(--line); background: var(--surface); border-radius: 16px;
+  padding: 10px 4px 8px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-family: var(--font-display); font-size: 14px; transition: transform .1s, opacity .2s;
+  touch-action: manipulation;
+}
+.act .g { font-size: 24px; line-height: 1; font-family: initial; }
+.act:active { transform: scale(.95); }
+.act:disabled { opacity: .38; cursor: default; }
+.act.need::after { content: ""; position: absolute; top: 7px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
+.act.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+.note { font-size: 13px; color: var(--muted); line-height: 1.5; display: flex; gap: 8px; align-items: flex-start; padding-inline: 4px; }
+.note b { font-family: var(--font-display); font-weight: 400; color: var(--moss); white-space: nowrap; }
+
+/* ---------- sheet ---------- */
+.sheet-wrap { position: fixed; inset: 0; z-index: 20; background: rgba(20, 18, 12, .45); display: flex; align-items: flex-end; justify-content: center; }
+.sheet {
+  width: 100%; max-width: 460px; max-height: 80%; overflow-y: auto;
+  background: var(--surface); color: var(--ink); border-radius: 22px 22px 0 0;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 12px; animation: up .25s ease-out;
+}
+@keyframes up { from { transform: translateY(40px); opacity: 0; } }
+.sheet h3 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 21px; }
+.sheet .sub { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.sheet .sec { font-size: 12px; letter-spacing: .06em; color: var(--muted); margin-top: 4px; }
+.items { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.item {
+  border: 1px solid var(--line); background: var(--bg); border-radius: 14px; padding: 10px;
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center; text-align: left; cursor: pointer; min-width: 0;
+}
+.item .g { grid-row: span 2; font-size: 28px; line-height: 1; }
+.item .t { font-family: var(--font-display); font-size: 15px; }
+.item .d { font-size: 12px; color: var(--muted); min-width: 0; }
+.item:disabled { opacity: .45; cursor: default; }
+.item.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.sheet-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.report { margin: 0; padding-left: 1.1em; line-height: 1.7; font-size: 14px; }
+
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 30; background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 99px; font-size: 14px; max-width: calc(100% - 32px); text-align: center; transition: opacity .3s; }
+.toast.hide { opacity: 0; pointer-events: none; }
+
+@media (max-width: 370px) {
+  .stats { grid-template-columns: 1fr; }
+  .act { font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="who">
+      <div class="name-row">
+        <h1 class="name" id="name">도치</h1>
+        <span class="stage" id="stage">아기 고슴도치 · 1일째</span>
+      </div>
+      <div class="xp" title="다음 성장까지"><i id="xp"></i></div>
+    </div>
+    <div class="coins" title="열매 (상점에서 사용)"><span class="berry"></span><span id="coins">0</span></div>
+    <button class="icon-btn" id="menuBtn" aria-label="설정">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></svg>
+    </button>
+  </header>
+
+  <section class="scene" id="scene" data-tod="day" aria-label="고슴도치의 집">
+    <div class="stars" id="stars"></div>
+    <div class="sky-body"></div>
+    <div class="hill"></div>
+    <div class="ground"></div>
+    <div class="hut" aria-hidden="true">
+      <svg viewBox="0 0 120 104">
+        <path d="M6 100 Q8 40 60 18 Q112 40 114 100 Z" fill="#8b6a45"/>
+        <path d="M14 100 Q16 48 60 28 Q104 48 106 100 Z" fill="#a8845a"/>
+        <path d="M40 100 Q40 66 60 62 Q80 66 80 100 Z" fill="#3b2a1a"/>
+        <path d="M2 46 Q60 -6 118 46" stroke="#6f8f4e" stroke-width="10" fill="none" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div id="poops"></div>
+    <div class="hog" id="hog" role="button" tabindex="0" aria-label="고슴도치 쓰다듬기">
+      <div class="hog-inner" id="hogInner"></div>
+    </div>
+    <div class="bubble hide" id="bubble"></div>
+    <div class="night-veil"></div>
+    <div id="fx"></div>
+    <div id="overlay"></div>
+  </section>
+
+  <section class="stats" id="stats" aria-label="상태"></section>
+
+  <nav class="pad" id="pad" aria-label="돌보기"></nav>
+
+  <p class="note"><b>도치 노트</b><span id="tip"></span></p>
+</div>
+
+<div class="sheet-wrap" id="sheetWrap" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<div class="toast hide" id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= data ================= */
+const SAVE_KEY = 'dochi-save-v1';
+const MIN = 60e3, HOUR = 60 * MIN;
+const STATS = [
+  { k: 'full',   label: '배부름' },
+  { k: 'happy',  label: '기분' },
+  { k: 'clean',  label: '청결' },
+  { k: 'energy', label: '체력' },
+  { k: 'health', label: '건강' },
+];
+const FOODS = {
+  kibble:     { name: '사료',  g: '🥣', full: 25, happy: 2,  price: 0, desc: '든든한 기본 밥 · 무제한' },
+  apple:      { name: '사과',  g: '🍎', full: 14, happy: 6,  price: 2, desc: '아삭아삭 과일' },
+  strawberry: { name: '딸기',  g: '🍓', full: 10, happy: 12, price: 4, desc: '달콤한 간식', treat: true },
+  mealworm:   { name: '밀웜',  g: '🐛', full: 8,  happy: 20, price: 6, desc: '제일 좋아하는 간식!', treat: true },
+};
+const GEAR = {
+  ribbon: { name: '분홍 리본', g: '🎀', price: 15 },
+  flower: { name: '들꽃 핀',   g: '🌼', price: 25 },
+  hat:    { name: '밀짚모자',  g: '👒', price: 40 },
+  crown:  { name: '도토리 왕관', g: '👑', price: 80 },
+};
+const STAGES = [
+  { at: 0,   name: '아기 고슴도치', scale: .66, spikes: 15 },
+  { at: 80,  name: '꼬마 고슴도치', scale: .82, spikes: 19 },
+  { at: 300, name: '어른 고슴도치', scale: 1,   spikes: 23 },
+];
+const TIPS = [
+  '고슴도치는 야행성이에요. 밤에 놀아 주면 열매를 더 많이 모아요.',
+  '고슴도치 가시는 5천~7천 개쯤 돼요. 겁이 나면 몸을 동그랗게 말아요.',
+  '너무 자주 콕콕 찌르면 "후웁!" 하고 가시를 세워요. 살살 쓰다듬어 주세요.',
+  '밀웜과 딸기는 간식이에요. 하루에 너무 많이 먹으면 배탈이 나요.',
+  '응가를 오래 두면 청결과 건강이 떨어져요. 바로바로 치워 주세요.',
+  '고슴도치는 우유를 소화하지 못해요. 그래서 우유는 상점에 없어요.',
+  '체력이 다 떨어지면 혼자 잠들어요. 다 자고 나면 스스로 일어나요.',
+  '앱을 닫아 두어도 시간은 흘러요. 가끔 들러서 돌봐 주세요.',
+];
+
+/* ================= helpers ================= */
+const $ = (id) => document.getElementById(id);
+const clamp = (v) => Math.max(0, Math.min(100, v));
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const dayKey = (t) => new Date(t).toDateString();
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function newState(name) {
+  const now = Date.now();
+  return {
+    v: 1, name, born: now, last: now,
+    full: 62, happy: 70, clean: 85, energy: 78, health: 92,
+    sleeping: false, sick: false,
+    poops: [], nextPoop: now + 20 * MIN,
+    xp: 0, coins: 8,
+    inv: { apple: 2, strawberry: 1, mealworm: 1 },
+    owned: [], wear: null,
+    treats: { day: dayKey(now), n: 0 },
+  };
+}
+
+let S = null;              // saved game state
+let adopted = false;       // false while the naming card is shown
+const T = { curlUntil: 0, eatUntil: 0, pokes: [], speakUntil: 0, nextChat: 0, game: null, lastMood: '', lastStage: -1, lastWear: undefined };
+
+function save() {
+  if (!adopted) return;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable */ }
+}
+function load() {
+  try { const raw = localStorage.getItem(SAVE_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+}
+
+/* ================= simulation ================= */
+// Advance the world by `ms` milliseconds ending at time `now`. Returns notable events.
+function step(s, ms, now, ev) {
+  const h = ms / HOUR, np = s.poops.length;
+  if (s.sleeping) {
+    s.full -= 4 * h; s.energy += 34 * h; s.happy -= 1 * h; s.clean -= 2 * h;
+  } else {
+    s.full -= 10 * h; s.energy -= 8 * h;
+    s.happy -= (6 + np * 5 + (s.full < 20 ? 8 : 0)) * h;
+    s.clean -= (5 + np * 4) * h;
+  }
+  const bad = (s.full < 15) + (s.clean < 20) + (np >= 3) + (s.energy < 8);
+  if (bad) s.health -= 6 * bad * h;
+  else if (s.full > 45 && s.clean > 45 && s.happy > 35) s.health += 4 * h;
+  if (s.sick) { s.health -= 3 * h; s.happy -= 4 * h; }
+  else if (s.health < 35 && Math.random() < ms / (40 * MIN)) { s.sick = true; ev.push('sick'); }
+
+  if (!s.sleeping && now >= s.nextPoop) {
+    if (s.full > 10 && s.poops.length < 6) { s.poops.push({ id: now + Math.random(), x: rand(30, 88) }); ev.push('poop'); }
+    s.nextPoop = now + rand(40, 75) * MIN;
+  }
+  if (!s.sleeping && s.energy <= 0) { s.sleeping = true; s.autoSleep = true; ev.push('fellAsleep'); }
+  if (s.sleeping && s.energy >= 100) { s.sleeping = false; s.autoSleep = false; ev.push('woke'); }
+  for (const { k } of STATS) s[k] = clamp(s[k]);
+}
+
+function catchUp(s, until) {
+  const ev = [];
+  let t = s.last;
+  const start = Math.max(t, until - 72 * HOUR); // simulate at most three days away
+  if (start > t) t = start;
+  while (t < until) {
+    const d = Math.min(MIN, until - t);
+    t += d;
+    step(s, d, t, ev);
+  }
+  s.last = until;
+  return ev;
+}
+
+/* ================= hedgehog drawing ================= */
+function spikeRing(cx, cy, rx, ry, n, len, a0, a1) {
+  const pts = [];
+  const total = n * 2;
+  for (let i = 0; i <= total; i++) {
+    const a = (a0 + (a1 - a0) * (i / total)) * Math.PI / 180;
+    const r = i % 2 ? 1 + len : 1;
+    pts.push((cx + Math.cos(a) * rx * r).toFixed(1) + ',' + (cy + Math.sin(a) * ry * r).toFixed(1));
+  }
+  return pts.join(' ');
+}
+
+function gearSvg(id) {
+  switch (id) {
+    case 'ribbon': return `<g transform="translate(134 50) rotate(18)">
+      <path d="M0 0 L-18 -11 Q-22 0 -18 11 Z" fill="#f07aa0"/><path d="M0 0 L18 -11 Q22 0 18 11 Z" fill="#f07aa0"/>
+      <circle r="5" fill="#d9507e"/></g>`;
+    case 'flower': return `<g transform="translate(136 56)">
+      ${[0, 72, 144, 216, 288].map((a) => `<ellipse rx="6" ry="10" transform="rotate(${a}) translate(0 -8)" fill="#fff6c9"/>`).join('')}
+      <circle r="6" fill="#f2b33d"/></g>`;
+    case 'hat': return `<g transform="translate(100 46)">
+      <ellipse rx="54" ry="11" fill="#e5c375"/><path d="M-28 0 Q-26 -30 0 -32 Q26 -30 28 0 Z" fill="#edd08a"/>
+      <path d="M-27 -6 Q0 2 27 -6 L27 -1 Q0 7 -27 -1 Z" fill="#c2416b"/></g>`;
+    case 'crown': return `<g transform="translate(100 34)">
+      <path d="M-24 10 L-28 -14 L-12 -2 L0 -20 L12 -2 L28 -14 L24 10 Z" fill="#f2c94c" stroke="#c99a1e" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="0" cy="-20" r="4" fill="#c2416b"/><circle cx="-28" cy="-14" r="3" fill="#5fa8d3"/><circle cx="28" cy="-14" r="3" fill="#5fa8d3"/></g>`;
+    default: return '';
+  }
+}
+
+function hogSvg(mood, stage, wear) {
+  const st = STAGES[stage];
+  const spikeDark = '#6b4a33', spikeMid = '#8d6446', tip = '#c9a27c';
+  const face = mood === 'sick' ? '#e3dcb0' : '#f2dcc0';
+  const snout = mood === 'sick' ? '#ece6c4' : '#f8e9d6';
+
+  if (mood === 'curl') {
+    return `<svg viewBox="0 0 200 200" aria-hidden="true"><g class="bob">
+      <ellipse cx="100" cy="190" rx="56" ry="7" fill="rgba(0,0,0,.18)"/>
+      <polygon points="${spikeRing(100, 134, 58, 54, st.spikes + 6, .26, 0, 360)}" fill="${spikeDark}"/>
+      <polygon points="${spikeRing(100, 136, 50, 46, st.spikes + 4, .2, 10, 370)}" fill="${spikeMid}"/>
+      <circle cx="100" cy="136" r="42" fill="${spikeMid}"/>
+      <polygon points="${spikeRing(100, 138, 34, 30, st.spikes, .22, 0, 360)}" fill="${tip}" opacity=".5"/>
+      <ellipse cx="118" cy="160" rx="9" ry="6" fill="${face}"/><circle cx="124" cy="161" r="3" fill="#3a2a22"/>
+    </g></svg>`;
+  }
+
+  let eyes, mouth = '', extra = '';
+  const eyeL = 80, eyeR = 120, ey = 122;
+  switch (mood) {
+    case 'happy': case 'eat':
+      eyes = `<path d="M${eyeL - 8} ${ey + 3} Q${eyeL} ${ey - 8} ${eyeL + 8} ${ey + 3}" stroke="#2b211b" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+              <path d="M${eyeR - 8} ${ey + 3} Q${eyeR} ${ey - 8} ${eyeR + 8} ${ey + 3}" stroke="#2b211b" stroke-width="4.5" fill="none" stroke-linecap="round"/>`;
+      break;
+    case 'sleep':
+      eyes = `<path d="M${eyeL - 8} ${ey} Q${eyeL} ${ey + 7} ${eyeL + 8} ${ey}" stroke="#2b211b" stroke-width="4" fill="none" stroke-linecap="round"/>
+              <path d="M${eyeR - 8} ${ey} Q${eyeR} ${ey + 7} ${eyeR + 8} ${ey}" stroke="#2b211b" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+      break;
+    case 'sick':
+      eyes = [eyeL, eyeR].map((x) => `<path d="M${x - 6} ${ey - 6} L${x + 6} ${ey + 6} M${x + 6} ${ey - 6} L${x - 6} ${ey + 6}" stroke="#2b211b" stroke-width="4" stroke-linecap="round"/>`).join('');
+      extra = `<path d="M150 92 q6 -10 0 -18 q-6 -8 0 -16" stroke="#7fa35c" stroke-width="4" fill="none" stroke-linecap="round" opacity=".8"/>`;
+      break;
+    case 'sad':
+      eyes = [eyeL, eyeR].map((x) => `<g class="blink"><circle cx="${x}" cy="${ey + 2}" r="7" fill="#2b211b"/><circle cx="${x + 2.5}" cy="${ey - 0.5}" r="2.4" fill="#fff"/></g>`).join('') +
+        `<path d="M${eyeL - 10} ${ey - 12} L${eyeL + 6} ${ey - 16}" stroke="#6b4a33" stroke-width="3.5" stroke-linecap="round"/>
+         <path d="M${eyeR + 10} ${ey - 12} L${eyeR - 6} ${ey - 16}" stroke="#6b4a33" stroke-width="3.5" stroke-linecap="round"/>
+         <path d="M${eyeL - 4} ${ey + 10} q-4 8 0 11 q4 -3 0 -11" fill="#7cc4f0"/>`;
+      break;
+    default:
+      eyes = [eyeL, eyeR].map((x) => `<g class="blink"><circle cx="${x}" cy="${ey}" r="7.5" fill="#2b211b"/><circle cx="${x + 2.6}" cy="${ey - 2.6}" r="2.6" fill="#fff"/></g>`).join('');
+  }
+  if (mood === 'eat') mouth = `<ellipse class="munch" cx="100" cy="148" rx="7" ry="6" fill="#8a3b3b"/>`;
+  else if (mood === 'happy') mouth = `<path d="M91 144 Q100 155 109 144 Z" fill="#8a3b3b"/>`;
+  else if (mood === 'sad' || mood === 'sick') mouth = `<path d="M93 150 Q100 144 107 150" stroke="#5a3a2c" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+  else if (mood === 'sleep') mouth = `<circle cx="100" cy="148" r="2.5" fill="#8a3b3b"/>`;
+  else mouth = `<path d="M93 144 Q96.5 149 100 144 Q103.5 149 107 144" stroke="#5a3a2c" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+
+  return `<svg viewBox="0 0 200 200" aria-hidden="true"><g class="bob">
+    <ellipse cx="100" cy="190" rx="62" ry="7" fill="rgba(0,0,0,.18)"/>
+    <polygon points="${spikeRing(100, 118, 70, 62, st.spikes, .32, 150, 390)}" fill="${spikeDark}"/>
+    <polygon points="${spikeRing(100, 120, 62, 55, st.spikes - 2, .24, 158, 382)}" fill="${spikeMid}"/>
+    <ellipse cx="100" cy="128" rx="66" ry="56" fill="${spikeMid}"/>
+    <polygon points="${spikeRing(100, 120, 52, 44, st.spikes - 4, .18, 165, 375)}" fill="${tip}" opacity=".45"/>
+    <circle cx="62" cy="92" r="11" fill="${face}"/><circle cx="62" cy="92" r="5.5" fill="#e9a5a0"/>
+    <circle cx="138" cy="92" r="11" fill="${face}"/><circle cx="138" cy="92" r="5.5" fill="#e9a5a0"/>
+    <path d="M48 140 Q46 96 100 94 Q154 96 152 140 Q150 178 100 180 Q50 178 48 140 Z" fill="${face}"/>
+    <ellipse cx="100" cy="142" rx="24" ry="17" fill="${snout}"/>
+    <ellipse cx="68" cy="140" rx="9" ry="5.5" fill="#f2a7a0" opacity="${mood === 'sick' ? .2 : .7}"/>
+    <ellipse cx="132" cy="140" rx="9" ry="5.5" fill="#f2a7a0" opacity="${mood === 'sick' ? .2 : .7}"/>
+    ${eyes}
+    <ellipse cx="100" cy="134" rx="7" ry="5.5" fill="#3a2a22"/><ellipse cx="98" cy="132.5" rx="2.2" ry="1.4" fill="#fff" opacity=".7"/>
+    ${mouth}
+    <ellipse cx="74" cy="182" rx="13" ry="8" fill="${face}"/><ellipse cx="126" cy="182" rx="13" ry="8" fill="${face}"/>
+    ${wear ? gearSvg(wear) : ''}
+    ${extra}
+  </g></svg>`;
+}
+
+/* ================= derived state ================= */
+function stageOf(xp) { let i = 0; STAGES.forEach((st, j) => { if (xp >= st.at) i = j; }); return i; }
+function moodOf(now) {
+  if (T.curlUntil > now) return 'curl';
+  if (S.sleeping) return 'sleep';
+  if (T.eatUntil > now) return 'eat';
+  if (S.sick) return 'sick';
+  if (Math.min(S.full, S.happy, S.clean, S.energy) < 20) return 'sad';
+  if (S.happy >= 75) return 'happy';
+  return 'normal';
+}
+function timeOfDay(d = new Date()) {
+  const h = d.getHours();
+  if (h >= 5 && h < 7) return 'dawn';
+  if (h >= 7 && h < 17) return 'day';
+  if (h >= 17 && h < 19) return 'dusk';
+  return 'night';
+}
+const isNight = () => timeOfDay() === 'night';
+
+/* ================= UI: static parts ================= */
+const scene = $('scene'), hog = $('hog'), hogInner = $('hogInner'), bubble = $('bubble');
+
+(function makeStars() {
+  let html = '';
+  for (let i = 0; i < 22; i++) html += `<i style="left:${rand(2, 98).toFixed(1)}%;top:${rand(4, 95).toFixed(1)}%;animation-delay:${rand(0, 3).toFixed(2)}s"></i>`;
+  $('stars').innerHTML = html;
+})();
+
+$('stats').innerHTML = STATS.map(({ k, label }) =>
+  `<div class="stat" id="st-${k}"><label>${label}</label><div class="bar"><i></i></div><span class="val">0</span></div>`).join('') +
+  `<div class="status-line" id="chips"></div>`;
+
+const ACTIONS = [
+  { id: 'feed',  g: '🍽️', label: '밥주기',   run: openFeed },
+  { id: 'pet',   g: '🤲', label: '쓰다듬기', run: () => pet(true) },
+  { id: 'play',  g: '🐛', label: '밀웜잡기', run: startGame },
+  { id: 'bath',  g: '🛁', label: '목욕',     run: bath },
+  { id: 'clean', g: '🧹', label: '청소',     run: cleanUp },
+  { id: 'sleep', g: '🌙', label: '재우기',   run: toggleSleep },
+  { id: 'med',   g: '💊', label: '약 먹이기', run: medicine },
+  { id: 'shop',  g: '🧺', label: '상점',     run: openShop },
+];
+$('pad').innerHTML = ACTIONS.map((a) =>
+  `<button class="act" id="act-${a.id}" type="button"><span class="g" aria-hidden="true">${a.g}</span><span class="l">${a.label}</span></button>`).join('');
+ACTIONS.forEach((a) => $('act-' + a.id).addEventListener('click', () => { if (adopted) a.run(); }));
+
+let tipIdx = Math.floor(Math.random() * TIPS.length);
+function nextTip() { $('tip').textContent = TIPS[tipIdx++ % TIPS.length]; }
+nextTip();
+setInterval(nextTip, 14000);
+
+/* ================= UI: render ================= */
+function render() {
+  const now = Date.now();
+  const stage = stageOf(S.xp);
+  const mood = moodOf(now);
+
+  $('name').textContent = S.name;
+  const days = Math.floor((now - S.born) / (24 * HOUR)) + 1;
+  $('stage').textContent = `${STAGES[stage].name} · ${days}일째`;
+  const next = STAGES[stage + 1];
+  $('xp').style.width = next ? (100 * (S.xp - STAGES[stage].at) / (next.at - STAGES[stage].at)).toFixed(1) + '%' : '100%';
+  $('xp').parentElement.title = next ? `${next.name}까지 ${Math.ceil(next.at - S.xp)} 남음` : '다 컸어요!';
+  $('coins').textContent = S.coins;
+
+  for (const { k } of STATS) {
+    const el = $('st-' + k), v = Math.round(S[k]);
+    el.querySelector('i').style.width = v + '%';
+    el.querySelector('.val').textContent = v;
+    el.classList.toggle('low', v < 25);
+    el.classList.toggle('mid', v >= 25 && v < 50);
+  }
+
+  const chips = [];
+  if (S.sick) chips.push('<span class="chip alert">아파요</span>');
+  if (S.poops.length) chips.push(`<span class="chip alert">응가 ${S.poops.length}개</span>`);
+  if (S.sleeping) chips.push('<span class="chip calm">쿨쿨 자는 중</span>');
+  if (isNight() && !S.sleeping) chips.push('<span class="chip calm">밤이라 신나요</span>');
+  $('chips').innerHTML = chips.join('');
+
+  // scene
+  scene.dataset.tod = timeOfDay();
+  scene.classList.toggle('sleeping', S.sleeping);
+  hog.dataset.mood = mood;
+  if (mood !== T.lastMood || stage !== T.lastStage || S.wear !== T.lastWear) {
+    hogInner.innerHTML = hogSvg(mood, stage, S.wear);
+    hogInner.style.transform = `scale(${STAGES[stage].scale})`;
+    if (T.lastStage !== -1 && stage > T.lastStage) celebrateStage(stage);
+    T.lastMood = mood; T.lastStage = stage; T.lastWear = S.wear;
+  }
+
+  // poops
+  const pw = $('poops');
+  const ids = S.poops.map((p) => String(p.id));
+  [...pw.children].forEach((c) => { if (!ids.includes(c.dataset.id)) c.remove(); });
+  S.poops.forEach((p) => {
+    if (pw.querySelector(`[data-id="${CSS.escape(String(p.id))}"]`)) return;
+    const b = document.createElement('button');
+    b.className = 'poop'; b.dataset.id = p.id; b.style.left = p.x + '%';
+    b.setAttribute('aria-label', '응가 치우기');
+    b.innerHTML = '<span class="stink"></span>💩';
+    b.addEventListener('click', (e) => { e.stopPropagation(); removePoop(p.id); });
+    pw.appendChild(b);
+  });
+
+  // action states
+  const asleep = S.sleeping;
+  const busy = !!T.game;
+  const set = (id, dis, need) => { const b = $('act-' + id); b.disabled = dis || busy; b.classList.toggle('need', !!need && !b.disabled); };
+  set('feed', asleep, S.full < 30);
+  set('pet', asleep, S.happy < 30);
+  set('play', asleep, false);
+  set('bath', asleep, S.clean < 30);
+  set('clean', S.poops.length === 0, S.poops.length > 0);
+  set('sleep', false, !asleep && S.energy < 25);
+  set('med', !S.sick, S.sick);
+  set('shop', false, false);
+  const sb = $('act-sleep');
+  sb.querySelector('.l').textContent = asleep ? '깨우기' : '재우기';
+  sb.querySelector('.g').textContent = asleep ? '☀️' : '🌙';
+}
+
+/* ================= feedback ================= */
+let bubbleTimer = 0;
+function say(text, ms = 2800) {
+  bubble.textContent = text;
+  bubble.classList.remove('hide');
+  T.speakUntil = Date.now() + ms;
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => bubble.classList.add('hide'), ms);
+}
+let toastTimer = 0;
+function toast(text) {
+  const t = $('toast');
+  t.textContent = text; t.classList.remove('hide');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add('hide'), 2400);
+}
+function hogPos() {
+  const r = hog.getBoundingClientRect(), s = scene.getBoundingClientRect();
+  return { x: (r.left + r.width / 2 - s.left) / s.width * 100, y: (r.top - s.top) / s.height * 100 };
+}
+function floatText(text, dx = 0) {
+  const p = hogPos();
+  const el = document.createElement('div');
+  el.className = 'float'; el.textContent = text;
+  el.style.left = `calc(${p.x}% + ${dx}px)`; el.style.top = `calc(${p.y}% + 20px)`;
+  $('fx').appendChild(el);
+  setTimeout(() => el.remove(), 1500);
+}
+function hop() { hog.classList.remove('hop'); void hog.offsetWidth; hog.classList.add('hop'); setTimeout(() => hog.classList.remove('hop'), 1100); }
+function addXp(n) { S.xp += n; }
+
+function celebrateStage(stage) {
+  hop();
+  say(stage === 1 ? '조금 컸어요! 가시도 늘었어요!' : '어른 고슴도치가 됐어요! 고마워요!', 4000);
+  toast(`${S.name}(이)가 ${STAGES[stage].name}(으)로 자랐어요`);
+  S.coins += stage * 10;
+}
+
+/* ================= actions ================= */
+function feed(key) {
+  const f = FOODS[key];
+  if (S.full >= 95) { say('배불러요… 이따 먹을래요'); return; }
+  if (f.price > 0) {
+    if (!S.inv[key]) { toast(`${f.name}(이)가 없어요. 상점에서 사 주세요`); return; }
+    S.inv[key]--;
+  }
+  closeSheet();
+  const p = hogPos();
+  const d = document.createElement('div');
+  d.className = 'drop'; d.textContent = f.g;
+  d.style.left = `calc(${p.x}% - 14px)`; d.style.bottom = '6%';
+  $('fx').appendChild(d);
+  setTimeout(() => d.remove(), 1700);
+  T.eatUntil = Date.now() + 1700;
+  S.full = clamp(S.full + f.full);
+  S.happy = clamp(S.happy + f.happy);
+  floatText(`배부름 +${f.full}`);
+  addXp(4);
+  if (f.treat) {
+    const today = dayKey(Date.now());
+    if (S.treats.day !== today) S.treats = { day: today, n: 0 };
+    S.treats.n++;
+    if (S.treats.n > 4) {
+      S.health = clamp(S.health - 8);
+      setTimeout(() => say('배가 살짝 아파요… 간식은 조금만 주세요'), 1800);
+    } else setTimeout(() => say(key === 'mealworm' ? '밀웜이다! 최고예요!' : '달콤해요!'), 1700);
+  } else setTimeout(() => say(pick(['냠냠 맛있어요', '오독오독', '잘 먹었습니다!'])), 1700);
+  // eating eventually leads to a poop
+  S.nextPoop = Math.min(S.nextPoop, Date.now() + rand(6, 14) * MIN);
+  render(); save();
+}
+
+function pet(fromButton) {
+  if (S.sleeping) { say('쿨… 쿨…'); return; }
+  const now = Date.now();
+  if (T.curlUntil > now) { say('후웁! 후웁!'); return; }
+  T.pokes = T.pokes.filter((t) => now - t < 6000);
+  T.pokes.push(now);
+  if (T.pokes.length >= 6) {
+    T.curlUntil = now + 5000; T.pokes = [];
+    S.happy = clamp(S.happy - 6);
+    say('후웁! 너무 많이 만졌어요! (가시 뾰족)', 3000);
+    render(); save();
+    setTimeout(render, 5100);
+    return;
+  }
+  S.happy = clamp(S.happy + (fromButton ? 5 : 4));
+  addXp(1);
+  floatText('♥', rand(-20, 20));
+  if (T.pokes.length === 1 || Math.random() < .4) say(pick(['헤헤 좋아요', '간질간질~', '킁킁, 좋은 냄새', '더 쓰다듬어 주세요']));
+  if (S.happy > 85) hop();
+  render(); save();
+}
+
+function bath() {
+  if (S.energy < 5) { say('너무 피곤해요…'); return; }
+  const fx = document.createElement('div'); fx.className = 'bubbles';
+  const p = hogPos();
+  for (let i = 0; i < 14; i++) {
+    const b = document.createElement('i'); const sz = rand(10, 26);
+    b.style.cssText = `width:${sz}px;height:${sz}px;left:calc(${p.x}% + ${rand(-60, 50)}px);top:calc(${p.y}% + ${rand(10, 80)}px);animation-delay:${rand(0, .8).toFixed(2)}s`;
+    fx.appendChild(b);
+  }
+  $('fx').appendChild(fx);
+  setTimeout(() => fx.remove(), 2600);
+  const was = S.clean;
+  S.clean = 100; S.energy = clamp(S.energy - 4);
+  S.happy = clamp(S.happy + (was < 40 ? 6 : 1));
+  addXp(was < 60 ? 5 : 1);
+  say(was < 40 ? '개운해요! 뽀송뽀송!' : '보글보글… 또 씻어요?');
+  render(); save();
+}
+
+function removePoop(id) {
+  S.poops = S.poops.filter((p) => p.id !== id);
+  S.happy = clamp(S.happy + 2); addXp(2);
+  if (!S.poops.length) say('깨끗해졌어요!');
+  render(); save();
+}
+function cleanUp() {
+  const n = S.poops.length;
+  if (!n) return;
+  S.poops = []; S.happy = clamp(S.happy + 2 * n); addXp(2 * n);
+  say(n > 2 ? '휴, 이제 살 것 같아요' : '깨끗해졌어요!');
+  render(); save();
+}
+
+function toggleSleep() {
+  if (S.sleeping) {
+    S.sleeping = false; S.autoSleep = false;
+    if (S.energy < 60) { S.happy = clamp(S.happy - 5); say('으으… 더 자고 싶었는데'); }
+    else say('잘 잤다! 좋은 아침');
+  } else {
+    if (S.energy > 85) { say('아직 하나도 안 졸려요!'); return; }
+    S.sleeping = true;
+    say('잘 자요…', 1800);
+    addXp(2);
+  }
+  render(); save();
+}
+
+function medicine() {
+  if (!S.sick) return;
+  S.sick = false; S.health = clamp(S.health + 25); S.happy = clamp(S.happy - 4);
+  addXp(5);
+  say('으엑 써요… 그래도 나아졌어요');
+  render(); save();
+}
+
+/* ================= wandering ================= */
+let walkTimer = 0;
+function wander() {
+  clearTimeout(walkTimer);
+  walkTimer = setTimeout(wander, rand(4000, 9000));
+  if (!adopted || S.sleeping || T.game || T.curlUntil > Date.now() || T.eatUntil > Date.now()) return;
+  const x = rand(36, 74);
+  hog.style.left = x + '%';
+  hog.classList.add('walking');
+  setTimeout(() => hog.classList.remove('walking'), 2600);
+}
+
+/* ================= mini game: catch mealworms ================= */
+function wormSvg() {
+  return `<svg viewBox="0 0 60 60" aria-hidden="true">
+    ${[0, 1, 2, 3].map((i) => `<circle class="seg" cx="${14 + i * 9}" cy="${34 - Math.sin(i) * 6}" r="${8 - i * .6}" fill="#e3b26a" stroke="#a87a3a" stroke-width="1.5"/>`).join('')}
+    <circle cx="14" cy="34" r="8" fill="#d79f55" stroke="#a87a3a" stroke-width="1.5"/>
+    <circle cx="11" cy="32" r="1.6" fill="#2b211b"/><circle cx="16" cy="32" r="1.6" fill="#2b211b"/></svg>`;
+}
+function startGame() {
+  if (S.sleeping || T.game) return;
+  if (S.energy < 15) { say('힘이 없어요… 먼저 쉬고 싶어요'); return; }
+  const ov = $('overlay');
+  ov.innerHTML = `<div class="game" id="game"><div class="game-hud"><span>잡은 밀웜 <b id="gScore">0</b></span><span id="gTime">20</span></div></div>`;
+  const g = { score: 0, end: Date.now() + 20000, spawn: 0, tick: 0 };
+  T.game = g;
+  render();
+  say('밀웜을 잡아 주세요! 빨리빨리!', 2000);
+  const area = $('game');
+  const spawn = () => {
+    if (!T.game) return;
+    const w = document.createElement('button');
+    const gold = Math.random() < .12;
+    w.className = 'worm' + (gold ? ' gold' : '');
+    w.setAttribute('aria-label', gold ? '황금 밀웜' : '밀웜');
+    w.style.left = rand(4, 82) + '%'; w.style.top = rand(14, 74) + '%';
+    w.innerHTML = wormSvg();
+    w.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (w.classList.contains('got')) return;
+      w.classList.add('got');
+      g.score += gold ? 3 : 1;
+      $('gScore').textContent = g.score;
+      setTimeout(() => w.remove(), 260);
+    });
+    area.appendChild(w);
+    setTimeout(() => { if (!w.classList.contains('got')) w.remove(); }, gold ? 900 : rand(1200, 1700));
+    g.spawn = setTimeout(spawn, rand(380, 720));
+  };
+  spawn();
+  g.tick = setInterval(() => {
+    const left = Math.max(0, Math.ceil((g.end - Date.now()) / 1000));
+    const el = $('gTime'); if (el) el.textContent = left;
+    if (left <= 0) endGame();
+  }, 200);
+}
+function endGame() {
+  const g = T.game; if (!g) return;
+  clearTimeout(g.spawn); clearInterval(g.tick);
+  T.game = null;
+  const night = isNight();
+  const coins = Math.round(g.score * (night ? 1.5 : 1));
+  S.coins += coins;
+  S.happy = clamp(S.happy + Math.min(25, 6 + g.score * 1.5));
+  S.energy = clamp(S.energy - 12); S.full = clamp(S.full - 5);
+  addXp(6 + Math.min(10, g.score));
+  $('overlay').innerHTML = `<div class="card"><h2>밀웜 ${g.score}마리 잡았어요!</h2>
+    <p>열매 ${coins}개를 얻었어요${night ? ' (야행성 보너스 1.5배)' : ''}. 기분이 좋아지고 체력이 조금 줄었어요.</p>
+    <div class="row" style="justify-content:flex-end"><button class="btn" id="gOk" type="button">좋아요</button></div></div>`;
+  $('gOk').addEventListener('click', () => { $('overlay').innerHTML = ''; });
+  hop(); say(g.score >= 12 ? '우와, 대단해요!' : '재밌었어요!');
+  render(); save();
+}
+
+/* ================= sheets ================= */
+const sheetWrap = $('sheetWrap'), sheet = $('sheet');
+function openSheet(html) { sheet.innerHTML = html; sheetWrap.hidden = false; }
+function closeSheet() { sheetWrap.hidden = true; sheet.innerHTML = ''; }
+sheetWrap.addEventListener('click', (e) => { if (e.target === sheetWrap) closeSheet(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sheetWrap.hidden) closeSheet(); });
+
+function openFeed() {
+  if (S.sleeping) return;
+  const items = Object.entries(FOODS).map(([k, f]) => {
+    const have = f.price === 0 ? '무제한' : `${S.inv[k] || 0}개 있음`;
+    const dis = f.price > 0 && !S.inv[k];
+    return `<button class="item" type="button" data-food="${k}" ${dis ? 'disabled' : ''}>
+      <span class="g">${f.g}</span><span class="t">${f.name}</span><span class="d">${have} · 배부름 +${f.full}</span></button>`;
+  }).join('');
+  openSheet(`<h3>뭘 먹일까요?</h3><p class="sub">배부름 ${Math.round(S.full)} / 100. 간식(딸기·밀웜)은 하루 4개까지가 좋아요.</p>
+    <div class="items">${items}</div>
+    <div class="sheet-actions"><button class="btn ghost" type="button" data-close>닫기</button><button class="btn ghost" type="button" data-shop>상점 가기</button></div>`);
+  sheet.querySelectorAll('[data-food]').forEach((b) => b.addEventListener('click', () => feed(b.dataset.food)));
+  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  sheet.querySelector('[data-shop]').addEventListener('click', openShop);
+}
+
+function openShop() {
+  const food = Object.entries(FOODS).filter(([, f]) => f.price > 0).map(([k, f]) =>
+    `<button class="item" type="button" data-buy="${k}" ${S.coins < f.price ? 'disabled' : ''}>
+      <span class="g">${f.g}</span><span class="t">${f.name} · 열매 ${f.price}</span><span class="d">${f.desc} (${S.inv[k] || 0}개)</span></button>`).join('');
+  const gear = Object.entries(GEAR).map(([k, g]) => {
+    const owned = S.owned.includes(k), on = S.wear === k;
+    const d = on ? '착용 중 · 눌러서 벗기' : owned ? '눌러서 착용' : `열매 ${g.price}`;
+    return `<button class="item${on ? ' on' : ''}" type="button" data-gear="${k}" ${!owned && S.coins < g.price ? 'disabled' : ''}>
+      <span class="g">${g.g}</span><span class="t">${g.name}</span><span class="d">${d}</span></button>`;
+  }).join('');
+  openSheet(`<h3>숲속 상점</h3><p class="sub">가진 열매 ${S.coins}개. 열매는 밀웜잡기 놀이에서 모아요.</p>
+    <div class="sec">먹이</div><div class="items">${food}</div>
+    <div class="sec">꾸미기</div><div class="items">${gear}</div>
+    <div class="sheet-actions"><button class="btn ghost" type="button" data-close>닫기</button></div>`);
+  sheet.querySelectorAll('[data-buy]').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.buy, f = FOODS[k];
+    if (S.coins < f.price) return;
+    S.coins -= f.price; S.inv[k] = (S.inv[k] || 0) + 1;
+    toast(`${f.name} 1개를 샀어요`);
+    save(); render(); openShop();
+  }));
+  sheet.querySelectorAll('[data-gear]').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.gear, g = GEAR[k];
+    if (!S.owned.includes(k)) {
+      if (S.coins < g.price) return;
+      S.coins -= g.price; S.owned.push(k); S.wear = k;
+      toast(`${g.name}을(를) 샀어요`);
+      say('어때요? 잘 어울려요?');
+    } else {
+      S.wear = S.wear === k ? null : k;
+    }
+    save(); render(); openShop();
+  }));
+  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+}
+
+function openMenu() {
+  const age = Math.floor((Date.now() - S.born) / HOUR);
+  openSheet(`<h3>${esc(S.name)}의 기록</h3>
+    <p class="sub">함께한 지 ${age < 24 ? age + '시간' : Math.floor(age / 24) + '일'} · 성장 점수 ${Math.floor(S.xp)} · 모은 꾸미기 ${S.owned.length}/${Object.keys(GEAR).length}</p>
+    <div class="sec">이름 바꾸기</div>
+    <form class="row" id="renameForm"><input class="input" id="renameInput" maxlength="10" value="${esc(S.name)}" aria-label="새 이름"><button class="btn" type="submit">바꾸기</button></form>
+    <div class="sec">처음부터 다시</div>
+    <p class="sub">지금 키우는 고슴도치와 열매, 꾸미기가 모두 사라져요.</p>
+    <div class="sheet-actions"><button class="btn ghost" type="button" data-close>닫기</button><button class="btn ghost" type="button" id="resetBtn">새로 시작하기</button></div>`);
+  $('renameForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = $('renameInput').value.trim();
+    if (!v) return;
+    S.name = v; save(); render(); closeSheet(); toast(`이제 이름은 ${v}예요`);
+  });
+  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  $('resetBtn').addEventListener('click', () => {
+    const b = $('resetBtn');
+    if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = '정말 다시 시작할게요'; b.classList.remove('ghost'); return; }
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ }
+    closeSheet();
+    showAdoption();
+  });
+}
+$('menuBtn').addEventListener('click', () => { if (adopted) openMenu(); });
+
+function showReport(ev, awayMs) {
+  const lines = [];
+  const n = (k) => ev.filter((e) => e === k).length;
+  if (n('poop')) lines.push(`응가를 ${n('poop')}번 했어요.`);
+  if (n('fellAsleep')) lines.push('지쳐서 혼자 잠들었어요.');
+  if (n('woke')) lines.push('푹 자고 스스로 일어났어요.');
+  if (n('sick')) lines.push('몸이 아파졌어요. 약을 먹여 주세요.');
+  if (S.full < 30) lines.push('배가 많이 고파요.');
+  if (S.clean < 30) lines.push('씻고 싶어해요.');
+  if (!lines.length) lines.push('얌전히 잘 기다렸어요.');
+  const h = Math.floor(awayMs / HOUR), m = Math.floor((awayMs % HOUR) / MIN);
+  openSheet(`<h3>다녀오셨어요!</h3><p class="sub">${h ? h + '시간 ' : ''}${m}분 동안 ${esc(S.name)}에게 있었던 일</p>
+    <ul class="report">${lines.map((l) => `<li>${l}</li>`).join('')}</ul>
+    <div class="sheet-actions"><button class="btn" type="button" data-close>돌보러 가기</button></div>`);
+  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+}
+
+/* ================= touch on hedgehog ================= */
+hog.addEventListener('click', () => { if (adopted && !T.game) pet(false); });
+hog.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && adopted) { e.preventDefault(); pet(false); } });
+
+/* ================= ambient chatter ================= */
+function chatter(now) {
+  if (now < T.nextChat || now < T.speakUntil || T.game || !sheetWrap.hidden) return;
+  T.nextChat = now + rand(11000, 18000);
+  if (S.sleeping) {
+    const z = document.createElement('div'); z.className = 'zzz';
+    const p = hogPos(); z.style.left = `calc(${p.x}% + 30px)`; z.style.top = `calc(${p.y}% + 10px)`;
+    z.textContent = 'Z'; z.style.fontSize = '22px';
+    $('fx').appendChild(z); setTimeout(() => z.remove(), 3000);
+    return;
+  }
+  let line;
+  if (S.sick) line = '몸이 으슬으슬해요…';
+  else if (S.poops.length >= 2) line = '응가 좀 치워 주세요…';
+  else if (S.full < 30) line = pick(['배고파요…', '꼬르륵…', '밀웜 먹고 싶다…']);
+  else if (S.energy < 25) line = '졸려요…';
+  else if (S.clean < 30) line = '몸이 근질근질해요';
+  else if (S.happy < 30) line = '심심해요. 놀아 주세요!';
+  else line = isNight() ? pick(['밤이다! 신난다!', '킁킁, 밤공기 좋아요', '같이 놀아요!'])
+                        : pick(['킁킁', '오늘도 좋은 날!', '하암…', '뒹굴뒹굴', '가시 정리 중이에요']);
+  say(line);
+}
+
+/* zzz bubbles while sleeping, independent of chatter */
+setInterval(() => {
+  if (!adopted || !S.sleeping) return;
+  const z = document.createElement('div'); z.className = 'zzz';
+  const p = hogPos(); z.style.left = `calc(${p.x}% + ${rand(10, 40)}px)`; z.style.top = `calc(${p.y}% + 10px)`;
+  z.textContent = 'z'; z.style.fontSize = rand(14, 24) + 'px';
+  $('fx').appendChild(z); setTimeout(() => z.remove(), 3000);
+}, 1400);
+
+/* ================= main loop ================= */
+let saveCount = 0;
+function tick() {
+  if (!adopted) return;
+  const now = Date.now();
+  const ev = [];
+  step(S, Math.max(0, now - S.last), now, ev);
+  S.last = now;
+  if (ev.includes('poop')) say('앗… 응가했어요', 2200);
+  if (ev.includes('sick')) say('몸이 이상해요…', 3000);
+  if (ev.includes('fellAsleep')) say('너무 피곤해서… 쿨…', 2500);
+  if (ev.includes('woke')) { say('잘 잤다!'); hop(); }
+  chatter(now);
+  render();
+  if (++saveCount % 5 === 0) save();
+}
+
+/* ================= adoption ================= */
+function showAdoption() {
+  adopted = false;
+  S = newState('도치');
+  T.lastMood = ''; T.lastStage = -1;
+  render();
+  $('overlay').innerHTML = `<form class="card" id="adoptForm">
+    <h2>숲에서 아기 고슴도치를 만났어요</h2>
+    <p>집에 데려가서 키워 볼까요? 이름을 지어 주세요.</p>
+    <div class="row"><input class="input" id="adoptName" maxlength="10" value="도치" aria-label="고슴도치 이름" autocomplete="off"><button class="btn" type="submit">함께 살기</button></div>
+  </form>`;
+  $('adoptForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('adoptName').value.trim() || '도치';
+    S = newState(name);
+    adopted = true;
+    T.lastMood = ''; T.lastStage = -1;
+    $('overlay').innerHTML = '';
+    save(); render(); hop();
+    say(`안녕! 나는 ${name}! 잘 부탁해요`, 3500);
+  });
+}
+
+function start(data) {
+  const fromHot = data && data.S;
+  const saved = fromHot ? data.S : load();
+  if (saved && saved.v === 1) {
+    S = saved;
+    adopted = true;
+    const away = Date.now() - S.last;
+    const ev = catchUp(S, Date.now());
+    render(); save();
+    if (!fromHot && away > 20 * MIN) showReport(ev, away);
+    else say(`${S.name} 왔어요!`);
+  } else {
+    showAdoption();
+  }
+  setInterval(tick, 1000);
+  wander();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); else tick(); });
+  window.addEventListener('pagehide', save);
+}
+
+if (window.claude?.hot) window.claude.hot.snapshot?.(() => ({ S: adopted ? S : null }));
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.claude) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+})();
+</script>
+</body>
+</html>
