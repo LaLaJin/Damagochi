@@ -1,6 +1,6 @@
 // Offline cache so the game opens without a network once installed.
-const CACHE = 'hedgehog-home-v1';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'hedgehog-home-v2';
+const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg', './vendor/three.min.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
