@@ -1,14 +1,14 @@
 {
-  "name": "도치 키우기",
+  "name": "도치 대모험",
   "short_name": "도치",
-  "description": "아기 고슴도치를 돌보고 키우는 다마고치 게임",
+  "description": "고슴도치를 키우고, 놀고, 탐험하며 보물을 모으는 다마고치 게임",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#e7ede1",
-  "theme_color": "#5f7d4a",
+  "background_color": "#e4ebdc",
+  "theme_color": "#3f6b3a",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
