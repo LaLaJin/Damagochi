@@ -1,14 +1,14 @@
 {
-  "name": "도치 대모험",
-  "short_name": "도치",
-  "description": "고슴도치를 키우고, 놀고, 탐험하며 보물을 모으는 다마고치 게임",
+  "name": "우리 집 고슴도치",
+  "short_name": "고슴도치",
+  "description": "집에서 아프리카 피그미 고슴도치를 키우는 사육 시뮬레이션",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#e4ebdc",
-  "theme_color": "#3f6b3a",
+  "background_color": "#f2f0eb",
+  "theme_color": "#4e6b4a",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]

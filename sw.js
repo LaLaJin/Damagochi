@@ -1,5 +1,5 @@
 // Offline cache so the game opens without a network once installed.
-const CACHE = 'dochi-v3';
+const CACHE = 'hedgehog-home-v1';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (e) => {
